@@ -1,0 +1,86 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "labkit"
+version = "0.0.1"
+description = "A well-typed, scalable Python framework for automated laboratory measurement over SCPI/VISA, with first-class physical quantities (including logarithmic units like dBm/dB) and a declarative plotting layer."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Magnus Stoleggen" }]
+keywords = ["scpi", "visa", "instrument-control", "metrology", "units", "pint", "matplotlib", "laboratory"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Typing :: Typed",
+]
+
+# Core dependencies: kept deliberately small. Everything needed to work with
+# quantities is here. Heavier, feature-specific dependencies live in extras so
+# that `import labkit` stays light and a units-only user need not install
+# matplotlib or a VISA stack.
+dependencies = [
+    "pint>=0.24",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+# Declarative plotting layer (labkit.plotting).
+plotting = ["matplotlib>=3.8"]
+# Instrument / SCPI control layer (labkit.instruments).
+instruments = ["pyvisa>=1.14"]
+# Everything a user of the full framework needs.
+all = ["labkit[plotting,instruments]"]
+# Development tooling.
+dev = [
+    "labkit[all]",
+    "pytest>=8",
+    "mypy>=1.10",
+]
+# Documentation site.
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.25",
+]
+
+[project.urls]
+Homepage = "https://github.com/Mgnsoscar/LabKit"
+Repository = "https://github.com/Mgnsoscar/LabKit"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/labkit"]
+
+# ---------------------------------------------------------------------------
+# Tooling configuration
+# ---------------------------------------------------------------------------
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.mypy]
+python_version = "3.11"
+# Strict type-checking on our own code so the type hints stay honest.
+strict = true
+# pint's Quantity and UnitRegistry are generic over their magnitude/registry
+# types. Spelling those parameters out everywhere (as `Quantity[Any]`, etc.)
+# adds noise without catching bugs and is fragile across pint versions, so we
+# relax just this one strictness flag while keeping the rest of strict mode.
+disallow_any_generics = false
+files = ["src/labkit", "tests"]
+warn_unused_configs = true
+show_error_codes = true
+
+# Optional / stub-less third-party libraries. We keep strict mode for labkit
+# itself but do not fail on missing upstream stubs. matplotlib and pyvisa are
+# optional extras that may not be installed in every environment.
+[[tool.mypy.overrides]]
+module = ["pyvisa.*", "matplotlib.*"]
+ignore_missing_imports = true
