@@ -82,8 +82,24 @@ beats convenient-but-wrong.
 Plots are described as small dataclasses (`LinePlot`, `Marker`, `Title`,
 `Legend`, `Panel`, ...) passed to a single `plot()` call. This keeps figure
 descriptions composable and serialisable, and keeps matplotlib specifics in one
-renderer instead of scattered through measurement scripts. The object model is
-defined now; the renderer is the next milestone.
+renderer instead of scattered through measurement scripts.
+
+The renderer's job is **quantity handling**, which is where the prototype's
+plotter had trouble. matplotlib does not understand physical quantities, so the
+renderer resolves one unit per axis (x, left-y, right-y), converts every series
+and limit on that axis to it, and hands matplotlib bare magnitudes. Two concrete
+prototype bugs this fixes:
+
+- Limits (`min_x`, `XLimits`, ...) were compared against quantity data with a
+  bare `x < min_x`, which raises for a quantity-vs-number comparison. Limits are
+  now converted to the axis unit first, and may themselves be quantities.
+- Series in different units (MHz and GHz) were plotted as raw magnitudes on a
+  shared axis, so they misaligned. They are now converted to a common unit, and
+  that unit is appended to the axis label automatically.
+
+No global matplotlib unit support (`pint.setup_matplotlib()`) is installed; the
+renderer extracts magnitudes itself, keeping behaviour local — the same
+no-global-state principle as the units layer.
 
 ## Instruments: one base, no copy-paste
 
@@ -132,6 +148,7 @@ pint ships.
 
 1. ~~Physically-correct `dBm`/`dB` arithmetic.~~ **Done** — see
    `labkit.units._logarithmic` and the [units guide](../units.md).
-2. The plotting renderer.
+2. ~~The plotting renderer (quantity-aware).~~ **Done** — see
+   `labkit.plotting.plot` and the [plotting guide](../plotting.md).
 3. The CSV writer.
 4. Concrete instrument drivers, with shared measurement modes factored out.

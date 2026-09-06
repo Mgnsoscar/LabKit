@@ -18,10 +18,10 @@ LabKit gives you three things that work together:
 
 > **Status: early rebuild.** This is a ground-up, better-documented rewrite of
 > an earlier prototype. In place: the package skeleton, the units foundation
-> **including physically-correct `dBm`/`dB` arithmetic**, the instrument base
-> layer (with dummy mode), and the utility helpers. Next milestones: the plot
-> renderer, the CSV writer, and the concrete instrument drivers. Public APIs may
-> still change before 1.0.
+> **including physically-correct `dBm`/`dB` arithmetic**, the **quantity-aware
+> plot renderer**, the instrument base layer (with dummy mode), and the utility
+> helpers. Next milestones: the CSV writer and the concrete instrument drivers.
+> Public APIs may still change before 1.0.
 
 ## Install
 
@@ -64,6 +64,20 @@ class Bench(TestEnvironment):
 
 bench = Bench(use_dummy_instruments=True)   # no hardware needed
 bench.analyzer.reset_instrument()           # prints the SCPI it would send
+```
+
+```python
+from labkit.units import quantity
+from labkit.plotting import plot, LinePlot, Title, XLabel, YLabel
+
+freqs = quantity(range(0, 1000), "MHz")
+plot(
+    LinePlot(freqs, power_trace),      # power_trace can be a dBm quantity
+    Title("Spectrum"),
+    XLabel("Frequency"),               # rendered as "Frequency [MHz]"
+    YLabel("Power"),
+    show=True,
+)
 ```
 
 ## Development
