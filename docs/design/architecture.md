@@ -150,5 +150,6 @@ pint ships.
    `labkit.units._logarithmic` and the [units guide](../units.md).
 2. ~~The plotting renderer (quantity-aware).~~ **Done** — see
    `labkit.plotting.plot` and the [plotting guide](../plotting.md).
-3. The CSV writer.
+3. ~~The CSV writer (quantity-aware).~~ **Done** — see `labkit.io.csv` and the
+   [saving-data guide](../io.md).
 4. Concrete instrument drivers, with shared measurement modes factored out.

@@ -19,9 +19,9 @@ LabKit gives you three things that work together:
 > **Status: early rebuild.** This is a ground-up, better-documented rewrite of
 > an earlier prototype. In place: the package skeleton, the units foundation
 > **including physically-correct `dBm`/`dB` arithmetic**, the **quantity-aware
-> plot renderer**, the instrument base layer (with dummy mode), and the utility
-> helpers. Next milestones: the CSV writer and the concrete instrument drivers.
-> Public APIs may still change before 1.0.
+> plot renderer**, the **quantity-aware CSV writer**, the instrument base layer
+> (with dummy mode), and the utility helpers. Next milestone: the concrete
+> instrument drivers. Public APIs may still change before 1.0.
 
 ## Install
 

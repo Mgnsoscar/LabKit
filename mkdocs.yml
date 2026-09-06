@@ -46,5 +46,6 @@ nav:
   - Home: index.md
   - Units & quantities: units.md
   - Plotting: plotting.md
+  - Saving data (CSV): io.md
   - Instruments: instruments.md
   - Design & rationale: design/architecture.md
