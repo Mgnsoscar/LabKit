@@ -79,6 +79,56 @@ byte-identical 500-line `sweep`/`trace`/`marker` files across the FSV and FPL;
 here they share one implementation, and adding another FSV-family analyzer is a
 few lines.
 
+## Signal generators
+
+The RF signal-generator driver is the Aim-TTi
+[`TGR6000`][labkit.instruments.drivers.aim_tti.tgr6000.TGR6000] (6 GHz). It
+follows the same menu structure as the analyzers, built from a shared
+[`SignalGenerator`][labkit.instruments.drivers.aim_tti._signal_generator.SignalGenerator]
+base so a future TGR-family generator reuses it:
+
+```python
+from labkit.units import quantity
+from labkit.instruments import TGR6000
+
+gen = ...  # a TGR6000 from your TestEnvironment
+
+gen.frequency.set_frequency(quantity(2.45, "GHz"))   # FREQ, in MHz
+gen.output.set_level(quantity(-10, "dBm"))           # DBMLEV
+gen.output.set_rf_enabled(True)                       # RFON
+
+gen.sweep.set_type("STEP")
+gen.sweep.set_start_frequency(quantity(1, "GHz"))
+gen.sweep.set_stop_frequency(quantity(2, "GHz"))
+gen.sweep.set_points(101)
+gen.sweep.set_dwell(quantity(10, "ms"))
+gen.sweep.run()
+```
+
+Menus: `frequency`, `output` (level + RF on/off), `sweep` (step and list
+sweeps, triggering, run control), `reference` (10 MHz socket), `system`
+(self-test, error queues, stores). Setters are quantity-checked and
+range-checked against the model (10 MHz – 6 GHz, −110 dBm – +7 dBm). The
+failsafe `_shutdown_procedure` forces the RF output **off** when the session
+ends.
+
+!!! warning "TGR6000 remote-command limitations"
+    Everything above is taken from the *TGR6000 Instruction Manual, Iss 9*.
+    Two limitations are inherent to the instrument, not the driver:
+
+    - **No modulation.** The TGR6000 is a CW/sweep generator; its command set
+      has no AM/FM/ΦM/pulse commands. The
+      [`modulation`][labkit.instruments.drivers.aim_tti.modulation.Modulation]
+      menu exists only to report this — its setters raise
+      `ModulationNotSupportedError`.
+    - **No read-back of frequency/level.** The remote language has no query
+      form for `FREQ` or the level commands, so those settings are set-only.
+      Sweep status, error queues, self-test and `*IDN?` *can* be queried.
+
+    The TGR6000 is a raw-socket instrument: it is addressed as
+    `TCPIP0::<ip>::9221::SOCKET`, takes line-feed command terminators, and
+    replies with `CR`/`LF`.
+
 ## Testing drivers without hardware
 
 [`mock_instrument`][labkit.instruments.mock.mock_instrument] wires a real driver
@@ -98,10 +148,10 @@ freqs, levels = sa.trace.get_data()       # parses the scripted response
 ```
 
 !!! note "SCPI accuracy"
-    The commands follow the standard R&S FSV3000 / FSW remote-control set. The
-    R&S documentation site was not reachable from the build environment, so
-    validate against your firmware if a command behaves unexpectedly. VNAs and
-    signal generators are the next drivers.
+    The R&S analyzer commands follow the standard R&S FSV3000 / FSW
+    remote-control set; validate against your firmware if a command behaves
+    unexpectedly. The Aim-TTi TGR6000 commands are taken directly from its
+    Instruction Manual (Iss 9). VNAs are the next drivers.
 
 ## API reference
 
@@ -116,5 +166,21 @@ freqs, levels = sa.trace.get_data()       # parses the scripted response
 ::: labkit.instruments.drivers.rohde_schwarz.fsv3007
 
 ::: labkit.instruments.drivers.rohde_schwarz.fpl1003
+
+::: labkit.instruments.drivers.aim_tti._signal_generator
+
+::: labkit.instruments.drivers.aim_tti.tgr6000
+
+::: labkit.instruments.drivers.aim_tti.frequency
+
+::: labkit.instruments.drivers.aim_tti.output
+
+::: labkit.instruments.drivers.aim_tti.sweep
+
+::: labkit.instruments.drivers.aim_tti.modulation
+
+::: labkit.instruments.drivers.aim_tti.reference
+
+::: labkit.instruments.drivers.aim_tti.system
 
 ::: labkit.instruments.registry

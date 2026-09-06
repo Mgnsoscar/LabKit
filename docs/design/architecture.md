@@ -153,9 +153,11 @@ pint ships.
 3. ~~The CSV writer (quantity-aware).~~ **Done** — see `labkit.io.csv` and the
    [saving-data guide](../io.md).
 4. Concrete instrument drivers, with shared measurement modes factored out.
-   **In progress** — the R&S `FSV3007` and `FPL1003` spectrum analyzers are
-   done. They share one `SpectrumAnalyzer` base built from reusable menus
-   (`labkit.instruments.drivers.rohde_schwarz`), so no command logic is
-   duplicated between them — where the prototype shipped byte-identical files
-   per instrument. Drivers are tested with a scriptable `MockBackend` (no
-   hardware). VNAs and signal generators follow.
+   **In progress** — the R&S `FSV3007` and `FPL1003` spectrum analyzers share
+   one `SpectrumAnalyzer` base built from reusable menus
+   (`labkit.instruments.drivers.rohde_schwarz`), and the Aim-TTi `TGR6000` RF
+   signal generator shares a `SignalGenerator` base built the same way
+   (`labkit.instruments.drivers.aim_tti`). No command logic is duplicated
+   between models — where the prototype shipped byte-identical files per
+   instrument. Every driver is tested with a scriptable `MockBackend` (no
+   hardware). VNAs follow.

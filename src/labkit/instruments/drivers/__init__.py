@@ -11,10 +11,13 @@ Available:
   signal and spectrum analyzer (7.5 GHz).
 - :class:`~labkit.instruments.drivers.rohde_schwarz.FPL1003` — R&S FPL1003
   spectrum analyzer (3 GHz).
+- :class:`~labkit.instruments.drivers.aim_tti.TGR6000` — Aim-TTi TGR6000
+  RF signal generator (6 GHz).
 """
 
 from __future__ import annotations
 
+from .aim_tti import TGR6000
 from .rohde_schwarz import FPL1003, FSV3007
 
-__all__ = ["FSV3007", "FPL1003"]
+__all__ = ["FSV3007", "FPL1003", "TGR6000"]
