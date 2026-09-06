@@ -155,9 +155,12 @@ pint ships.
 4. Concrete instrument drivers, with shared measurement modes factored out.
    **In progress** — the R&S `FSV3007` and `FPL1003` spectrum analyzers share
    one `SpectrumAnalyzer` base built from reusable menus
-   (`labkit.instruments.drivers.rohde_schwarz`), and the Aim-TTi `TGR6000` RF
-   signal generator shares a `SignalGenerator` base built the same way
+   (`labkit.instruments.drivers.rohde_schwarz`); the R&S `ZNLE18` vector network
+   analyzer shares a `NetworkAnalyzer` base built the same way
+   (`labkit.instruments.drivers.rohde_schwarz.vna`); and the Aim-TTi `TGR6000` RF
+   signal generator shares a `SignalGenerator` base
    (`labkit.instruments.drivers.aim_tti`). No command logic is duplicated
    between models — where the prototype shipped byte-identical files per
    instrument. Every driver is tested with a scriptable `MockBackend` (no
-   hardware). VNAs follow.
+   hardware), and its commands are verified against the manufacturer's
+   remote-control manual.

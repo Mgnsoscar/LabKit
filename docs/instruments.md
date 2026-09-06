@@ -129,6 +129,56 @@ ends.
     `TCPIP0::<ip>::9221::SOCKET`, takes line-feed command terminators, and
     replies with `CR`/`LF`.
 
+## Vector network analyzers
+
+The VNA driver is the Rohde & Schwarz
+[`ZNLE18`][labkit.instruments.drivers.rohde_schwarz.vna.znle18.ZNLE18] (1 MHz –
+18 GHz, 2-port). It follows the same menu structure as the analyzers, built from a
+shared
+[`NetworkAnalyzer`][labkit.instruments.drivers.rohde_schwarz.vna._network_analyzer.NetworkAnalyzer]
+base so another ZNL/ZNLE-family model reuses it:
+
+```python
+from labkit.units import quantity
+from labkit.instruments import ZNLE18
+
+vna = ...  # a ZNLE18 from your TestEnvironment
+
+vna.trace.create("Trc1", "S21")            # define an S21 trace
+vna.trace.set_format("MLOG")               # dB-magnitude display
+vna.display.set_window_state(1, True)      # create a diagram
+vna.display.feed_trace(1, 1, "Trc1")       # show the trace
+
+vna.frequency.set_start(quantity(1, "GHz"))
+vna.frequency.set_stop(quantity(18, "GHz"))
+vna.sweep.set_points(1001)
+vna.bandwidth.set_if_bandwidth(quantity(10, "kHz"))
+vna.power.set_power(quantity(-10, "dBm"))
+vna.average.set_state(True)
+vna.average.set_count(16)
+
+freqs, s21 = vna.measure()                 # single sweep -> (freq array, complex S21)
+```
+
+The menus cover far more than the earlier prototype's sweep/trace/display: channel
+management, S-parameter trace creation and formatting (dB mag, phase, Smith, …),
+stimulus frequency, sweep (type/points/time/count/dwell/trigger), IF bandwidth,
+source power and RF output, sweep averaging, markers with peak/min search,
+system-error correction and cal-pool load/save, and diagram/display control. Data
+comes back three ways — formatted ([`get_formatted_data`][labkit.instruments.drivers.rohde_schwarz.vna.trace.Trace.get_formatted_data]),
+raw complex ([`get_complex_data`][labkit.instruments.drivers.rohde_schwarz.vna.trace.Trace.get_complex_data]),
+and the stimulus axis ([`get_stimulus`][labkit.instruments.drivers.rohde_schwarz.vna.trace.Trace.get_stimulus]).
+Frequency setters are quantity- and range-checked against the model. The failsafe
+`_shutdown_procedure` switches the RF source output off when the session ends.
+
+!!! note "Guided calibration"
+    The [`calibration`][labkit.instruments.drivers.rohde_schwarz.vna.calibration.Calibration]
+    menu *manages* correction: it switches system-error correction on/off, queries
+    the calibration state/date, and loads/saves correction data sets from the
+    instrument's cal pool. The interactive guided-calibration sequence (measuring
+    each standard to compute the error terms) is intentionally left to explicit,
+    manual scripting against the cal kit in use.
+
 ## Testing drivers without hardware
 
 [`mock_instrument`][labkit.instruments.mock.mock_instrument] wires a real driver
@@ -151,7 +201,8 @@ freqs, levels = sa.trace.get_data()       # parses the scripted response
     The R&S analyzer commands follow the standard R&S FSV3000 / FSW
     remote-control set; validate against your firmware if a command behaves
     unexpectedly. The Aim-TTi TGR6000 commands are taken directly from its
-    Instruction Manual (Iss 9). VNAs are the next drivers.
+    Instruction Manual (Iss 9), and the R&S ZNLE18 commands from the R&S
+    ZNL/ZNLE User Manual (1178.5966.02, issue 23).
 
 ## API reference
 
@@ -182,5 +233,29 @@ freqs, levels = sa.trace.get_data()       # parses the scripted response
 ::: labkit.instruments.drivers.aim_tti.reference
 
 ::: labkit.instruments.drivers.aim_tti.system
+
+::: labkit.instruments.drivers.rohde_schwarz.vna._network_analyzer
+
+::: labkit.instruments.drivers.rohde_schwarz.vna.znle18
+
+::: labkit.instruments.drivers.rohde_schwarz.vna.channel
+
+::: labkit.instruments.drivers.rohde_schwarz.vna.frequency
+
+::: labkit.instruments.drivers.rohde_schwarz.vna.trace
+
+::: labkit.instruments.drivers.rohde_schwarz.vna.sweep
+
+::: labkit.instruments.drivers.rohde_schwarz.vna.bandwidth
+
+::: labkit.instruments.drivers.rohde_schwarz.vna.power
+
+::: labkit.instruments.drivers.rohde_schwarz.vna.average
+
+::: labkit.instruments.drivers.rohde_schwarz.vna.marker
+
+::: labkit.instruments.drivers.rohde_schwarz.vna.calibration
+
+::: labkit.instruments.drivers.rohde_schwarz.vna.display
 
 ::: labkit.instruments.registry
