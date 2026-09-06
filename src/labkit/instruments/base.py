@@ -85,6 +85,10 @@ class BaseInstrument(ABC):
         :meth:`_build_address`.
     timeout:
         Communication timeout as a duration quantity, e.g. ``quantity(10, "s")``.
+    backend:
+        An explicit transport to use instead of one derived from `environment`.
+        Mainly for testing: pass a :class:`~labkit.instruments.mock.MockBackend`
+        to drive a real driver with scripted responses and no hardware.
     """
 
     def __init__(
@@ -93,6 +97,7 @@ class BaseInstrument(ABC):
         name: str,
         address: str,
         timeout: Quantity = quantity(10, "s"),
+        backend: Optional[Backend] = None,
     ) -> None:
         self._name = name
         self._address = self._build_address(address)
@@ -101,7 +106,9 @@ class BaseInstrument(ABC):
         self._lock = Lock()
 
         self._backend: Backend
-        if self._rm is None:
+        if backend is not None:
+            self._backend = backend
+        elif self._rm is None:
             self._backend = DummyBackend()
         else:
             resource = self._rm.open_resource(self._address)

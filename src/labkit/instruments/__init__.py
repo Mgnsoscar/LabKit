@@ -19,7 +19,9 @@ Importing this package does not import `pyvisa`; only creating a non-dummy
 from __future__ import annotations
 
 from .base import BaseInstrument, Backend, DummyBackend, Menu
+from .drivers import FSV3007
 from .environment import TestEnvironment
+from .mock import MockBackend, MockEnvironment, mock_instrument
 
 __all__ = [
     "TestEnvironment",
@@ -27,4 +29,8 @@ __all__ = [
     "Backend",
     "DummyBackend",
     "Menu",
+    "FSV3007",
+    "MockBackend",
+    "MockEnvironment",
+    "mock_instrument",
 ]
