@@ -20,9 +20,10 @@ LabKit gives you three things that work together:
 > an earlier prototype. In place: the package skeleton, the units foundation
 > **including physically-correct `dBm`/`dB` arithmetic**, the **quantity-aware
 > plot renderer**, the **quantity-aware CSV writer**, the instrument base layer
-> (dummy mode + a scriptable mock for tests), and the first driver — the R&S
-> **`FSV3007` spectrum analyzer**, built from reusable menus. Next: more drivers
-> (VNAs, signal generators). Public APIs may still change before 1.0.
+> (dummy mode + a scriptable mock for tests), and the first drivers — the R&S
+> **`FSV3007` and `FPL1003` spectrum analyzers**, which share one implementation
+> built from reusable menus. Next: more drivers (VNAs, signal generators).
+> Public APIs may still change before 1.0.
 
 ## Install
 

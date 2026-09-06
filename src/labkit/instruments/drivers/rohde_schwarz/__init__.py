@@ -8,8 +8,10 @@ instead of duplicating them.
 
 from __future__ import annotations
 
+from ._spectrum_analyzer import SpectrumAnalyzer
 from .amplitude import Amplitude
 from .bandwidth import Bandwidth
+from .fpl1003 import FPL1003
 from .frequency import Frequency
 from .fsv3007 import FSV3007
 from .marker import Marker
@@ -19,6 +21,8 @@ from .trace import Trace
 
 __all__ = [
     "FSV3007",
+    "FPL1003",
+    "SpectrumAnalyzer",
     "Frequency",
     "Bandwidth",
     "Sweep",

@@ -37,9 +37,10 @@ leave hardware safe — e.g. RF output off), then the VISA session is closed. Se
 
 ## Drivers
 
-The first concrete driver is the Rohde & Schwarz
-[`FSV3007`][labkit.instruments.drivers.rohde_schwarz.fsv3007.FSV3007] spectrum
-analyzer. It exposes the instrument through **menus** — grouped commands you
+The spectrum-analyzer drivers are the Rohde & Schwarz
+[`FSV3007`][labkit.instruments.drivers.rohde_schwarz.fsv3007.FSV3007] (7.5 GHz)
+and [`FPL1003`][labkit.instruments.drivers.rohde_schwarz.fpl1003.FPL1003]
+(3 GHz). Both expose the instrument through **menus** — grouped commands you
 reach as attributes:
 
 ```python
@@ -69,11 +70,14 @@ and a dBm array).
 ### One implementation, many analyzers
 
 The menus (`Frequency`, `Bandwidth`, `Sweep`, `Amplitude`, `Trace`, `Marker`,
-`Display`, `ReferenceOscillator`) live in
-`labkit.instruments.drivers.rohde_schwarz` and are **composed** by the driver.
-The prototype copy-pasted byte-identical 500-line `sweep`/`trace`/`marker` files
-across the FSV and FPL analyzers; here the shared logic is written once, so a
-future FPL1003 driver reuses the same menus.
+`Display`, `ReferenceOscillator`) and the measurement control (trigger, marker,
+`measure_trace`) live in a shared
+[`SpectrumAnalyzer`][labkit.instruments.drivers.rohde_schwarz._spectrum_analyzer.SpectrumAnalyzer]
+base. `FSV3007` and `FPL1003` are just that base with their own identity — no
+command logic is duplicated between them. The prototype copy-pasted
+byte-identical 500-line `sweep`/`trace`/`marker` files across the FSV and FPL;
+here they share one implementation, and adding another FSV-family analyzer is a
+few lines.
 
 ## Testing drivers without hardware
 
@@ -94,10 +98,10 @@ freqs, levels = sa.trace.get_data()       # parses the scripted response
 ```
 
 !!! note "SCPI accuracy"
-    The FSV3007 commands follow the standard R&S FSV3000 / FSW remote-control
-    set. The R&S documentation site was not reachable from the build
-    environment, so validate against your firmware if a command behaves
-    unexpectedly. VNAs and signal generators are the next drivers.
+    The commands follow the standard R&S FSV3000 / FSW remote-control set. The
+    R&S documentation site was not reachable from the build environment, so
+    validate against your firmware if a command behaves unexpectedly. VNAs and
+    signal generators are the next drivers.
 
 ## API reference
 
@@ -107,6 +111,10 @@ freqs, levels = sa.trace.get_data()       # parses the scripted response
 
 ::: labkit.instruments.mock
 
+::: labkit.instruments.drivers.rohde_schwarz._spectrum_analyzer
+
 ::: labkit.instruments.drivers.rohde_schwarz.fsv3007
+
+::: labkit.instruments.drivers.rohde_schwarz.fpl1003
 
 ::: labkit.instruments.registry
