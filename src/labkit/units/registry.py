@@ -23,11 +23,18 @@ from __future__ import annotations
 
 import pint
 
+from ._logarithmic import install_log_arithmetic
+
 __all__ = ["ureg", "make_registry"]
 
 
 def make_registry() -> pint.UnitRegistry:
     """Construct and configure a fresh LabKit unit registry.
+
+    The registry's ``Quantity`` class is replaced with a log-aware subclass so
+    that ``dBm``/``dBW``/``dB`` arithmetic is physically correct (see
+    :mod:`labkit.units._logarithmic`). Because the Quantity class is specific to
+    this registry, that is a local change, not a global patch on pint.
 
     Exposed mainly for tests that need an isolated registry; application code
     should import the shared :data:`ureg` instead.
@@ -37,6 +44,11 @@ def make_registry() -> pint.UnitRegistry:
         # them to base units; conversions must be explicit.
         autoconvert_offset_to_baseunit=False,
     )
+    # Print compact unit symbols by default ("500 MHz", "0 dBm") instead of the
+    # long names ("500 megahertz", "0 decibelmilliwatt").
+    registry.formatter.default_format = "~"
+    # Install physically-correct logarithmic-unit arithmetic.
+    install_log_arithmetic(registry)
     # Make this the registry that pint hands out for unpickling and for any
     # library that asks for "the" application registry.
     pint.set_application_registry(registry)  # type: ignore[no-untyped-call]

@@ -49,14 +49,33 @@ Neither library adds `dBm` correctly out of the box. pint parses and converts
 
 The physically-correct answer combines the powers in the **linear** domain
 (1 mW + 2 mW = 3 mW ≈ 4.77 dBm). That behaviour — the prototype's real
-contribution — is what LabKit will implement on top of pint, in
-`labkit.units.quantity`. The target semantics are already written down as
-skipped tests in `tests/test_units.py`:
+contribution — is implemented on top of pint in `labkit.units._logarithmic`
+and covered by `tests/test_logarithmic.py`:
 
-- `dBm + dBm` → add in linear domain, return `dBm`
+- `dBm + dBm` → add in the linear domain, return `dBm`
+- `dBm + dB` → apply a gain, return `dBm`
 - `dBm − dBm` → a dimensionless `dB` ratio
-- `dBm + dB` / scalar `× ÷` → scale in linear domain, return `dBm`
-- nonsensical mixes (e.g. `dBm × dBm`) → raise
+- `dB ± dB` → cascade/difference of gains, return `dB`
+- everything else involving a log operand (adding a bare number, multiplying,
+  dividing) → `LogArithmeticError` with guidance
+
+### How, without a global monkey-patch
+
+A pint registry owns its own `Quantity` class, so LabKit installs a log-aware
+`Quantity` subclass onto **its** registry (`install_log_arithmetic`). Only
+quantities from LabKit's registry get the behaviour; other pint users in the
+same process are untouched. This is the key improvement over the prototype's
+astropy monkey-patching, which changed global state.
+
+### Multiplication is deliberately rejected, not guessed
+
+pint routes `n * unit(X)` through `Quantity(1, X) * n`, so there is no way to
+make `n * unit("dBm")` *construct* `n dBm` while also giving `dBm * n` a
+sensible scaling meaning — the two collide. Rather than pick a silent behaviour
+that surprises half the time, LabKit rejects multiplication/division on
+logarithmic operands and directs the user to construct with
+`quantity(value, "dBm")` and to scale via a linear unit. Correct-by-refusal
+beats convenient-but-wrong.
 
 ## Plotting: declarative objects
 
@@ -103,15 +122,16 @@ pint ships.
 ## Quality bar
 
 - **pytest** — the test suite covers unit conversions, dimensionality guards,
-  dummy-mode instruments, failsafe shutdown ordering, and the utilities. The
-  target `dBm` semantics live here as skipped tests until implemented.
+  the full logarithmic-arithmetic matrix, dummy-mode instruments, failsafe
+  shutdown ordering, and the utilities.
 - **mypy (strict)** — the package ships `py.typed` and type-checks under strict
   mode (with `disallow_any_generics` relaxed only for pint's generic types).
 - **mkdocs** — this site, generated from the docstrings.
 
 ## Roadmap
 
-1. Physically-correct `dBm`/`dB` arithmetic (un-skip the unit tests).
+1. ~~Physically-correct `dBm`/`dB` arithmetic.~~ **Done** — see
+   `labkit.units._logarithmic` and the [units guide](../units.md).
 2. The plotting renderer.
 3. The CSV writer.
 4. Concrete instrument drivers, with shared measurement modes factored out.

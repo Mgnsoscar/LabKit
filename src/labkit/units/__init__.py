@@ -13,6 +13,7 @@ See :mod:`labkit.units.quantity` for the roadmap on logarithmic-unit arithmetic.
 from __future__ import annotations
 
 from ._literals import UnitName
+from ._logarithmic import LogArithmeticError
 from .kinds import (
     DimensionalityError,
     ensure_angle,
@@ -37,6 +38,7 @@ __all__ = [
     "unit",
     "is_quantity",
     "UnitName",
+    "LogArithmeticError",
     "DimensionalityError",
     "is_frequency",
     "is_power",

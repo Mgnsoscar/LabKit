@@ -1,13 +1,10 @@
 """Units: construction, conversion, and dimensionality guards.
 
-The skipped tests at the bottom pin down the *target* behaviour for logarithmic
-units. They are the specification for the next milestone (physically-correct
-dBm/dB arithmetic) and should be un-skipped as that lands.
+Logarithmic-unit arithmetic (dBm/dB) has its own suite in
+``tests/test_logarithmic.py``.
 """
 
 from __future__ import annotations
-
-import math
 
 import pytest
 
@@ -58,18 +55,3 @@ def test_ensure_returns_quantity_when_valid() -> None:
 def test_ensure_raises_on_wrong_dimension() -> None:
     with pytest.raises(DimensionalityError):
         ensure_power(quantity(1, "Hz"))
-
-
-# --- Target behaviour for the next milestone (not implemented yet) ----------
-
-@pytest.mark.skip(reason="Physically-correct dBm arithmetic is the next milestone.")
-def test_dbm_addition_combines_in_linear_domain() -> None:
-    # 1 mW + 2 mW = 3 mW  ->  ~4.771 dBm
-    result = quantity(0, "dBm") + quantity(3, "dBm")
-    assert result.to("dBm").magnitude == pytest.approx(10 * math.log10(3), abs=1e-3)
-
-
-@pytest.mark.skip(reason="Physically-correct dBm arithmetic is the next milestone.")
-def test_dbm_minus_dbm_is_dimensionless_db() -> None:
-    result = quantity(3, "dBm") - quantity(0, "dBm")
-    assert result.to("dB").magnitude == pytest.approx(3.0)

@@ -10,22 +10,18 @@ LabKit quantities are `pint` quantities drawn from the shared registry (see
 :mod:`labkit.units.registry`). This module is the single place other code
 should import :data:`Quantity` and :func:`quantity` from.
 
-Roadmap
--------
-The distinctive behaviour of the earlier prototype — logarithmic units such as
-``dBm``/``dB`` that add, subtract and scale in the *linear* domain — is not yet
-implemented here. pint gives us correct ``dBm`` ↔ ``mW`` conversion for free,
-but physically-correct ``dBm`` arithmetic is the next piece to build on top of
-this module. The intended semantics are captured as skipped tests in
-``tests/test_units.py`` so the target behaviour is written down and verifiable.
+Logarithmic units such as ``dBm``/``dB`` add, subtract and combine in the
+physically-correct way; that behaviour lives in
+:mod:`labkit.units._logarithmic` and is installed on the registry
+automatically. Note that logarithmic quantities must be *constructed* with
+``quantity(value, "dBm")`` — the ``value * unit("dBm")`` idiom is not supported
+for them (see :func:`unit`).
 """
 
 from __future__ import annotations
 
 import re
 from typing import TYPE_CHECKING, Any
-
-import pint
 
 from ._literals import UnitName
 from .registry import ureg
@@ -56,6 +52,13 @@ def unit(name: UnitName) -> "Unit":
 
     >>> 5 * unit("MHz") == quantity(5, "MHz")
     True
+
+    .. warning::
+        This idiom does **not** work for logarithmic units (``dBm``, ``dBW``,
+        ``dB``): ``value * unit("dBm")`` relies on multiplication, which is
+        undefined for them and raises
+        :class:`~labkit.units.LogArithmeticError`. Build those with
+        ``quantity(value, "dBm")`` instead.
     """
     return ureg.Unit(name)
 
@@ -85,17 +88,16 @@ def quantity(value: Any, unit: str | None = None) -> "Quantity":
                 "Pass either a string like 'quantity(\"500 MHz\")' or a value "
                 "and unit like 'quantity(500, \"MHz\")', not both."
             )
-        try:
-            return ureg.Quantity(value)
-        except pint.errors.OffsetUnitCalculusError:
-            # pint parses "-20 dBm" as -20 * dBm, which is ambiguous for offset
-            # / logarithmic units. Split the magnitude from the unit and use the
-            # numeric constructor, which handles offset units correctly.
-            match = _VALUE_UNIT.match(value)
-            if match is None:
-                raise
+        # A leading "<number> <unit>" is built with the numeric constructor.
+        # pint's string parser would read "-20 dBm" as -20 * dBm, which is
+        # undefined for logarithmic units; splitting avoids that entirely and is
+        # also faster. Fall back to the full parser for anything else (a bare
+        # unit, or a value with no unit).
+        match = _VALUE_UNIT.match(value)
+        if match is not None:
             magnitude, unit_str = match.groups()
             return ureg.Quantity(float(magnitude), unit_str.strip())
+        return ureg.Quantity(value)
     return ureg.Quantity(value, unit)
 
 

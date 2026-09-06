@@ -17,11 +17,11 @@ LabKit gives you three things that work together:
   dummy mode for developing without an instrument attached.
 
 > **Status: early rebuild.** This is a ground-up, better-documented rewrite of
-> an earlier prototype. The package skeleton, the units foundation, the
-> instrument base layer (with dummy mode), and the utility helpers are in place.
-> The physically-correct `dBm`/`dB` arithmetic, the plot renderer, the CSV
-> writer, and the concrete instrument drivers are the next milestones. Public
-> APIs may still change before 1.0.
+> an earlier prototype. In place: the package skeleton, the units foundation
+> **including physically-correct `dBm`/`dB` arithmetic**, the instrument base
+> layer (with dummy mode), and the utility helpers. Next milestones: the plot
+> renderer, the CSV writer, and the concrete instrument drivers. Public APIs may
+> still change before 1.0.
 
 ## Install
 
@@ -43,6 +43,11 @@ span = 10 * unit("MHz")
 level = quantity(-20, "dBm")
 print(level.to("uW"))            # 10.0 microwatt
 ensure_power(level)              # raises if it isn't a power
+
+# dBm/dB arithmetic is physically correct:
+quantity(0, "dBm") + quantity(3, "dBm")   # 4.76 dBm  (combine powers)
+quantity(0, "dBm") + quantity(3, "dB")    # 3 dBm     (apply a gain)
+quantity(3, "dBm") - quantity(0, "dBm")   # 3 dB      (power ratio)
 ```
 
 ```python
