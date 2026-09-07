@@ -79,6 +79,49 @@ byte-identical 500-line `sweep`/`trace`/`marker` files across the FSV and FPL;
 here they share one implementation, and adding another FSV-family analyzer is a
 few lines.
 
+### Measurement modes
+
+Beyond a plain frequency sweep, the analyzers expose the Spectrum application's
+"Meas" functions through the `measurement` menu — verified against the R&S
+FSVA3000/FSV3000 User Manual:
+
+```python
+sa.sweep.set_continuous(False)                 # results need a synchronized sweep
+
+sa.measurement.aclr()                          # adjacent-channel power
+sa.measurement.set_channel_pairs(2)
+sa.measurement.set_channel_spacing(quantity(5, "MHz"))
+sa.trigger(wait_for_completion=True)
+tx, adj_lower, adj_upper, *_ = sa.measurement.get_power_result("ACLR")
+
+sa.measurement.channel_power()                 # or occupied_bandwidth(), multicarrier_aclr()
+sa.measurement.enable_harmonics(); pct, db = sa.measurement.get_thd()
+sa.measurement.enable_toi();       toi = sa.measurement.get_toi()
+sa.measurement.enable_time_domain_power(rms=True)
+sa.measurement.set_mode("SEM")                 # spectrum emission mask (or "SPURIOUS")
+```
+
+Covered: channel power, ACLR / multi-carrier ACLR, occupied bandwidth, spectrum
+emission mask and spurious (via `set_mode`), time-domain power, harmonic
+distortion, third-order intercept, and AM modulation depth.
+
+The analyzer can also switch **measurement application** — the `create_channel` /
+`select_channel` / `list_channels` controls wrap the `INSTrument` subsystem — and
+the **Noise Figure** application (R&S FSV3-K30) has its own `noise_figure` menu,
+verified against the FSV3-K30 User Manual:
+
+```python
+sa.create_channel("NOISe", "Noise")            # or sa.noise_figure.create()
+sa.noise_figure.set_enr(15.2)                  # constant ENR, in dB
+sa.noise_figure.set_start(quantity(10, "MHz"))
+sa.noise_figure.set_stop(quantity(3, "GHz"))
+sa.noise_figure.set_points(101)
+sa.noise_figure.set_second_stage_correction(True)
+sa.trigger(wait_for_completion=True)
+nf   = sa.noise_figure.get_noise_figure()      # per-point noise figure (dB)
+gain = sa.noise_figure.get_gain()              # per-point gain (dB)
+```
+
 ## Signal generators
 
 The RF signal-generator driver is the Aim-TTi
@@ -198,11 +241,12 @@ freqs, levels = sa.trace.get_data()       # parses the scripted response
 ```
 
 !!! note "SCPI accuracy"
-    The R&S analyzer commands follow the standard R&S FSV3000 / FSW
-    remote-control set; validate against your firmware if a command behaves
-    unexpectedly. The Aim-TTi TGR6000 commands are taken directly from its
-    Instruction Manual (Iss 9), and the R&S ZNLE18 commands from the R&S
-    ZNL/ZNLE User Manual (1178.5966.02, issue 23).
+    All command strings are taken from the manufacturers' remote-control manuals:
+    the R&S analyzers from the R&S FSVA3000/FSV3000 User Manual (1178.8520.02,
+    issue 16) and the FSV3-K30 Noise Figure User Manual (1178.9432.02, issue 13);
+    the Aim-TTi TGR6000 from its Instruction Manual (Iss 9); and the R&S ZNLE18
+    from the R&S ZNL/ZNLE User Manual (1178.5966.02, issue 23). Validate against
+    your firmware version if a command behaves unexpectedly.
 
 ## API reference
 
@@ -217,6 +261,10 @@ freqs, levels = sa.trace.get_data()       # parses the scripted response
 ::: labkit.instruments.drivers.rohde_schwarz.fsv3007
 
 ::: labkit.instruments.drivers.rohde_schwarz.fpl1003
+
+::: labkit.instruments.drivers.rohde_schwarz.measurement
+
+::: labkit.instruments.drivers.rohde_schwarz.noise_figure
 
 ::: labkit.instruments.drivers.aim_tti._signal_generator
 

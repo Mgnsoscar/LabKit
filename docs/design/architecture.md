@@ -155,7 +155,10 @@ pint ships.
 4. Concrete instrument drivers, with shared measurement modes factored out.
    **In progress** — the R&S `FSV3007` and `FPL1003` spectrum analyzers share
    one `SpectrumAnalyzer` base built from reusable menus
-   (`labkit.instruments.drivers.rohde_schwarz`); the R&S `ZNLE18` vector network
+   (`labkit.instruments.drivers.rohde_schwarz`), including the Spectrum
+   measurement functions (channel power, ACLR, OBW, SEM/spurious, time-domain
+   power, harmonics, TOI, AM depth) and the Noise Figure (K30) application
+   reached through the `INSTrument` channel controls; the R&S `ZNLE18` vector network
    analyzer shares a `NetworkAnalyzer` base built the same way
    (`labkit.instruments.drivers.rohde_schwarz.vna`); and the Aim-TTi `TGR6000` RF
    signal generator shares a `SignalGenerator` base

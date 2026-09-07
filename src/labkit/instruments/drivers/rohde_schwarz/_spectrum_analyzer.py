@@ -16,6 +16,8 @@ from .amplitude import Amplitude
 from .bandwidth import Bandwidth
 from .frequency import Frequency
 from .marker import Marker
+from .measurement import Measurement
+from .noise_figure import NoiseFigure
 from .sweep import Sweep
 from .system import Display, ReferenceOscillator
 from .trace import Trace
@@ -41,6 +43,8 @@ class SpectrumAnalyzer(BaseInstrument):
     trace: Trace
     display: Display
     reference: ReferenceOscillator
+    measurement: Measurement
+    noise_figure: NoiseFigure
 
     def __init__(
         self,
@@ -58,10 +62,36 @@ class SpectrumAnalyzer(BaseInstrument):
         self.trace = Trace(self)
         self.display = Display(self)
         self.reference = ReferenceOscillator(self)
+        self.measurement = Measurement(self)
+        self.noise_figure = NoiseFigure(self)
 
     def _build_address(self, address: str) -> str:
         """``"192.168.0.10"`` -> ``"TCPIP::192.168.0.10::INSTR"``."""
         return f"TCPIP::{address}::INSTR"
+
+    # -- measurement channels / applications ------------------------------
+    def create_channel(self, channel_type: str, name: str) -> None:
+        """Add a measurement channel/application (``INST:CRE <type>,'<name>'``).
+
+        `channel_type` is an R&S channel-type mnemonic, e.g. ``"SANALYZER"``
+        (Spectrum), ``"IQ"`` (I/Q Analyzer), ``"ADEM"`` (analog demod) or
+        ``"NOISe"`` (Noise Figure, requires the K30 option).
+        """
+        self.write(f"INST:CRE {channel_type},'{name}'")
+
+    def select_channel(self, name: str) -> None:
+        """Activate an existing measurement channel by name (``INST:SEL '<name>'``)."""
+        self.write(f"INST:SEL '{name}'")
+
+    def delete_channel(self, name: str) -> None:
+        """Delete a measurement channel by name (``INST:DEL '<name>'``)."""
+        self.write(f"INST:DEL '{name}'")
+
+    def list_channels(self) -> list[tuple[str, str]]:
+        """List channels as ``(type, name)`` pairs (``INST:LIST?``)."""
+        items = [x.strip().strip("'\"") for x in self.query("INST:LIST?").split(",")]
+        items = [x for x in items if x != ""]
+        return [(items[i], items[i + 1]) for i in range(0, len(items) - 1, 2)]
 
     # -- markers -----------------------------------------------------------
     def marker(self, number: int = 1, enable: bool = False) -> Marker:

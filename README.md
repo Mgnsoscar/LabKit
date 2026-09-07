@@ -21,10 +21,12 @@ LabKit gives you three things that work together:
 > **including physically-correct `dBm`/`dB` arithmetic**, the **quantity-aware
 > plot renderer**, the **quantity-aware CSV writer**, the instrument base layer
 > (dummy mode + a scriptable mock for tests), and the first drivers — the R&S
-> **`FSV3007` and `FPL1003` spectrum analyzers**, the R&S **`ZNLE18` 18 GHz
-> vector network analyzer**, and the Aim-TTi **`TGR6000` 6 GHz RF signal
-> generator**, each built from reusable per-topic menus over a shared base.
-> Public APIs may still change before 1.0.
+> **`FSV3007` and `FPL1003` spectrum analyzers** (with the Spectrum measurement
+> functions — channel power, ACLR, OBW, SEM, harmonics, TOI, AM depth — and the
+> **Noise Figure** application), the R&S **`ZNLE18` 18 GHz vector network
+> analyzer**, and the Aim-TTi **`TGR6000` 6 GHz RF signal generator**, each built
+> from reusable per-topic menus over a shared base. Public APIs may still change
+> before 1.0.
 
 ## Install
 

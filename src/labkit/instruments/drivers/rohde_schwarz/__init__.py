@@ -20,6 +20,8 @@ from .fpl1003 import FPL1003
 from .frequency import Frequency
 from .fsv3007 import FSV3007
 from .marker import Marker
+from .measurement import Measurement
+from .noise_figure import NoiseFigure
 from .sweep import Sweep
 from .system import Display, ReferenceOscillator
 from .trace import Trace
@@ -37,6 +39,8 @@ __all__ = [
     "Marker",
     "Display",
     "ReferenceOscillator",
+    "Measurement",
+    "NoiseFigure",
     "ZNLE18",
     "NetworkAnalyzer",
 ]

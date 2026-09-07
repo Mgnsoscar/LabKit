@@ -5,10 +5,9 @@ SCPI-ready numbers out; SCPI responses in, quantities/bools out. Every menu
 here follows the R&S FSV3000 / FSW remote-command reference (the ``SENSe:``
 prefix is left implicit, as the instruments accept the short form).
 
-Because the R&S documentation site is not reachable from this build, the exact
-command strings were written from the standard R&S FSV/FSW SCPI set. Anything
-firmware-specific worth double-checking is flagged in a comment at its call
-site.
+Command strings are verified against the R&S FSVA3000/FSV3000 User Manual
+(1178.8520.02, issue 16); validate against your firmware version if a command
+behaves unexpectedly.
 """
 
 from __future__ import annotations
@@ -20,6 +19,7 @@ __all__ = [
     "parse_bool",
     "parse_float",
     "parse_int",
+    "parse_float_list",
     "scpi_number",
     "hz",
     "seconds",
@@ -75,6 +75,11 @@ def parse_float(response: str) -> float:
 
 def parse_int(response: str) -> int:
     return int(round(float(response.strip())))
+
+
+def parse_float_list(response: str) -> list[float]:
+    """Parse a comma-separated numeric response into a list of floats."""
+    return [float(v) for v in response.split(",") if v.strip()]
 
 
 def as_frequency(response: str) -> Quantity:

@@ -9,8 +9,9 @@ This is the payoff of the menu/base structure: in the earlier prototype the FPL
 and FSV shipped byte-identical ``sweep``/``trace``/``marker`` files; here they
 share one implementation.
 
-Commands follow the standard R&S FSV/FPL / FSW remote-control set; validate
-against your firmware if a command behaves unexpectedly.
+Commands are verified against the R&S FSVA3000/FSV3000 User Manual
+(1178.8520.02, issue 16), which the FPL1000 family shares; validate against your
+firmware version if a command behaves unexpectedly.
 """
 
 from __future__ import annotations
@@ -24,7 +25,11 @@ class FPL1003(SpectrumAnalyzer):
     """Driver for the R&S FPL1003 spectrum analyzer (5 kHz – 3 GHz, TCP/IP).
 
     Exposes the instrument through menus — ``frequency``, ``bandwidth``,
-    ``sweep``, ``amplitude``, ``trace``, ``display``, ``reference`` — plus
-    :meth:`~...SpectrumAnalyzer.marker`, :meth:`~...SpectrumAnalyzer.trigger`
-    and :meth:`~...SpectrumAnalyzer.measure_trace`.
+    ``sweep``, ``amplitude``, ``trace``, ``display``, ``reference``,
+    ``measurement`` (channel power, ACLR, OBW, SEM, spurious, time-domain power,
+    harmonics, TOI, AM depth) and ``noise_figure`` (the R&S FSV3-K30 application)
+    — plus :meth:`~...SpectrumAnalyzer.marker`, :meth:`~...SpectrumAnalyzer.trigger`,
+    :meth:`~...SpectrumAnalyzer.measure_trace`, and the ``INSTrument``
+    channel/application controls (:meth:`~...SpectrumAnalyzer.create_channel`,
+    :meth:`~...SpectrumAnalyzer.select_channel`).
     """
