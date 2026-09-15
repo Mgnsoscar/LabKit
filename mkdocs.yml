@@ -47,5 +47,6 @@ nav:
   - Units & quantities: units.md
   - Plotting: plotting.md
   - Saving data (CSV): io.md
+  - Signal paths: signal_path.md
   - Instruments: instruments.md
   - Design & rationale: design/architecture.md

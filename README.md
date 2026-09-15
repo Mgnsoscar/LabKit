@@ -15,6 +15,11 @@ LabKit gives you three things that work together:
 - **Instrument control** (`labkit.instruments`): a clean SCPI/VISA base class
   with a *failsafe* shutdown that always leaves hardware in a safe state, plus a
   dummy mode for developing without an instrument attached.
+- **Signal paths** (`labkit.signal_path`): the cables, attenuators and couplers
+  between an instrument and the DUT, with frequency-interpolated loss tables,
+  so raw measurements can be moved to the DUT reference plane — now or later.
+- **Saving and reloading data** (`labkit.io`): a quantity-aware CSV writer and
+  reader, so post-processing never needs a re-measurement.
 
 > **Status: early rebuild.** This is a ground-up, better-documented rewrite of
 > an earlier prototype. In place: the package skeleton, the units foundation

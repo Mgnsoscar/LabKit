@@ -74,7 +74,10 @@ def is_dimensionless_decibel(q: object) -> bool:
     """
     if not is_quantity(q):
         return False
-    return str(getattr(q, "units", "")) == "decibel"
+    units = getattr(q, "units", None)
+    # The registry prints compact symbols by default ("dB"); accept the long
+    # name too in case the formatter is changed.
+    return units is not None and str(units) in ("dB", "decibel")
 
 
 def _ensure(

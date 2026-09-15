@@ -21,6 +21,22 @@ bench = Bench(use_dummy_instruments=True)   # no hardware needed
 bench.analyzer.reset_instrument()           # prints the SCPI it would send
 ```
 
+## One bench, shared everywhere
+
+Every construction of a `TestEnvironment` opens a new VISA session to every
+instrument, so a project's scripts and helper modules must not each build their
+own. Call `instance()` instead — it constructs the bench once and returns the
+same object, with the same connected instruments, on every later call:
+
+```python
+bench = Bench.instance()                            # first call connects
+bench = Bench.instance()                            # same object, no reconnect
+bench = Bench.instance(use_dummy_instruments=True)  # a separate, offline bench
+```
+
+`Bench.discard_instance()` closes that bench and forgets it, and `bench.close()`
+closes every instrument on a bench (each running its failsafe shutdown).
+
 ## Dummy mode
 
 Passing `use_dummy_instruments=True` gives every instrument a
@@ -120,6 +136,17 @@ sa.noise_figure.set_second_stage_correction(True)
 sa.trigger(wait_for_completion=True)
 nf   = sa.noise_figure.get_noise_figure()      # per-point noise figure (dB)
 gain = sa.noise_figure.get_gain()              # per-point gain (dB)
+```
+
+Losses in the input and output paths change the noise figure the application
+computes, so they are entered on the instrument — as a constant, a frequency
+table (which the application interpolates), or straight from a
+[signal path](signal_path.md):
+
+```python
+sa.noise_figure.set_input_loss(quantity(0.8, "dB"))
+sa.noise_figure.set_loss_table("OUTPUT", freqs, losses, name="CableB")
+sa.noise_figure.set_loss_from_path("OUTPUT", output_path, measurement_freqs)
 ```
 
 ## Signal generators

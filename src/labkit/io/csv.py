@@ -1,4 +1,4 @@
-"""Declarative, quantity-aware CSV writing.
+"""Declarative, quantity-aware CSV writing and reading.
 
 Describe the CSV you want as :class:`Column` and :class:`Value` objects, then
 call :func:`write`::
@@ -15,6 +15,14 @@ A :class:`Column` is a full data column; a :class:`Value` is a single scalar
 written as a comment line in the header (handy for recording settings alongside
 the data). Columns need not be the same length — short ones are padded with
 empty cells.
+
+:func:`read` is the inverse: it parses a file written this way back into a
+:class:`Table` whose columns and header values are quantities again, so data
+can be post-processed long after it was measured::
+
+    table = read("results/sweep.csv")
+    freqs = table.column("Frequency")     # a MHz quantity array
+    peak = table.value("Peak")            # a MHz quantity
 
 Units
 -----
@@ -37,15 +45,16 @@ from __future__ import annotations
 import csv as _csv
 import math
 import os
+import re
 from abc import ABC
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import numpy as np
 
-from ..units import is_quantity
+from ..units import is_quantity, quantity
 
-__all__ = ["CSVObject", "Column", "Value", "write"]
+__all__ = ["CSVObject", "Column", "Value", "Table", "write", "read"]
 
 
 def _resolve(data: Any, unit: Optional[str]) -> tuple[Optional[str], Any]:
@@ -159,3 +168,123 @@ def write(
         writer.writerows(rows)
 
     return path
+
+
+# --- reading ----------------------------------------------------------------
+
+_LABEL_WITH_UNIT = re.compile(r"^(?P<label>.*?)\s*\[(?P<unit>[^\]]*)\]\s*$")
+
+
+def _split_label(text: str) -> tuple[str, Optional[str]]:
+    """``"Frequency [MHz]"`` -> ``("Frequency", "MHz")``; ``"Note"`` -> ``("Note", None)``."""
+    match = _LABEL_WITH_UNIT.match(text.strip())
+    if match is None:
+        return text.strip(), None
+    return match.group("label").strip(), match.group("unit").strip()
+
+
+def _parse_scalar(text: str, unit: Optional[str]) -> Any:
+    """A header value: a quantity if it has a unit, a float if numeric, else the text."""
+    text = text.strip()
+    try:
+        number = float(text)
+    except ValueError:
+        return text
+    return quantity(number, unit) if unit else number
+
+
+def _parse_column(cells: list[str], unit: Optional[str]) -> Any:
+    """A data column: a quantity/float array if numeric (blank = NaN), else strings."""
+    numbers: list[float] = []
+    for cell in cells:
+        cell = cell.strip()
+        if cell == "":
+            numbers.append(math.nan)
+            continue
+        try:
+            numbers.append(float(cell))
+        except ValueError:
+            return np.array([c.strip() for c in cells], dtype=object)
+    magnitudes = np.array(numbers, dtype=float)
+    return quantity(magnitudes, unit) if unit else magnitudes
+
+
+@dataclass
+class Table:
+    """A CSV file read back: header values and data columns, units restored.
+
+    Attributes
+    ----------
+    path:
+        The file the table was read from.
+    values:
+        ``{label: value}`` from the ``# label [unit]: value`` header comments.
+        Quantities where a unit was present, floats where numeric, else text.
+    columns:
+        ``{label: data}`` for each data column. A quantity array where the header
+        carried a unit, a float array otherwise (blank cells become NaN), or an
+        object array of strings for non-numeric columns.
+    """
+
+    path: str
+    values: dict[str, Any]
+    columns: dict[str, Any]
+
+    def column(self, label: str) -> Any:
+        """The column with this label (without the unit suffix)."""
+        try:
+            return self.columns[label]
+        except KeyError:
+            raise KeyError(f"No column '{label}' in {self.path}; have {list(self.columns)}.") from None
+
+    def value(self, label: str) -> Any:
+        """The header value with this label (without the unit suffix)."""
+        try:
+            return self.values[label]
+        except KeyError:
+            raise KeyError(f"No header value '{label}' in {self.path}; have {list(self.values)}.") from None
+
+    def first_column(self, predicate: Callable[[object], bool]) -> Any:
+        """The first column for which `predicate` is true (e.g. ``is_frequency``)."""
+        for data in self.columns.values():
+            if predicate(data):
+                return data
+        raise KeyError(f"No column in {self.path} matches {getattr(predicate, '__name__', predicate)}.")
+
+
+def read(path: str) -> Table:
+    """Read a CSV written by :func:`write` back into a :class:`Table`.
+
+    Leading ``#`` lines are parsed as ``label [unit]: value`` header values; the
+    first non-comment row is the column header; every following row is data.
+    Columns whose header carries a ``[unit]`` come back as quantity arrays.
+    """
+    values: dict[str, Any] = {}
+    data_lines: list[str] = []
+    with open(path, encoding="utf-8", newline="") as handle:
+        for raw in handle:
+            line = raw.rstrip("\r\n")
+            if not data_lines and line.startswith("#"):
+                body = line[1:].strip()
+                label_text, _, value_text = body.partition(":")
+                if not value_text and ":" not in body:
+                    continue  # a bare comment, not a value
+                label, unit = _split_label(label_text)
+                values[label] = _parse_scalar(value_text, unit)
+                continue
+            if line.strip() == "" and not data_lines:
+                continue
+            data_lines.append(line)
+
+    if not data_lines:
+        raise ValueError(f"{path} has no column header.")
+
+    rows = list(_csv.reader(data_lines))
+    header = rows[0]
+    data_rows = [r for r in rows[1:] if any(c.strip() for c in r)]
+    columns: dict[str, Any] = {}
+    for index, text in enumerate(header):
+        label, unit = _split_label(text)
+        cells = [r[index] if index < len(r) else "" for r in data_rows]
+        columns[label] = _parse_column(cells, unit)
+    return Table(path=os.path.abspath(path), values=values, columns=columns)

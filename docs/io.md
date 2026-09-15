@@ -37,6 +37,25 @@ in the same unit:
     header `MHz` but wrote the original GHz numbers — a silent mislabelling. Here
     an explicit unit converts the data, so the file is always self-consistent.
 
+## Reading data back
+
+[`read`][labkit.io.csv.read] is the inverse of `write`: it returns a
+[`Table`][labkit.io.csv.Table] whose columns and header values are quantities
+again, so post-processing can run on saved raw data without re-measuring:
+
+```python
+from labkit.io import read
+
+table = read("results/sweep.csv")
+freqs = table.column("Frequency")      # a MHz quantity array
+powers = table.column("Power")         # a dBm quantity array
+peak = table.value("Peak")             # a MHz quantity
+operator = table.value("Operator")     # "MSO"
+```
+
+Column labels are given without the unit suffix. Blank cells (from padded
+short columns) come back as `NaN`; a non-numeric column comes back as strings.
+
 ## API reference
 
 ::: labkit.io.csv

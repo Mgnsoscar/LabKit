@@ -1,11 +1,12 @@
-"""Data output helpers for LabKit.
+"""Data input/output helpers for LabKit.
 
-Currently this package holds the declarative CSV writer. It mirrors the
-plotting API: describe the columns you want and hand them to :func:`write`.
+The declarative, quantity-aware CSV writer and its inverse: describe the
+columns you want and hand them to :func:`write`; :func:`read` brings a file
+back as a :class:`Table` of quantities.
 """
 
 from __future__ import annotations
 
-from .csv import Column, Value, write
+from .csv import Column, Table, Value, read, write
 
-__all__ = ["Column", "Value", "write"]
+__all__ = ["Column", "Value", "Table", "write", "read"]
