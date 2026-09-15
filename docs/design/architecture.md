@@ -58,6 +58,9 @@ and covered by `tests/test_logarithmic.py`:
 - `dB ± dB` → cascade/difference of gains, return `dB`
 - everything else involving a log operand (adding a bare number, multiplying,
   dividing) → `LogArithmeticError` with guidance
+- array reductions follow suit: `sum`/`mean`/`cumsum`/`median` of a `dBm`
+  array reduce in the linear domain, `ptp`/`diff`/`std` return `dB`, and
+  `prod`/`var` are rejected (see the [units guide](../units.md))
 
 ### How, without a global monkey-patch
 

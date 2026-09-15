@@ -48,13 +48,31 @@ Two consequences worth stating plainly:
 - **To scale a power or take a raw power ratio, convert to a linear unit
   first**, e.g. ``(p.to("mW") * 2).to("dBm")`` or ``a.to("mW") / b.to("mW")``.
 
-Not yet handled: linear-domain reductions over arrays (``sum``/``mean`` of a
-``dBm`` array). Convert to a linear unit first for those.
+Array reductions
+----------------
+Reductions over a **log-power array** follow the same physics. Both the numpy
+function form (``np.sum(levels)``) and the method form (``levels.sum()``) are
+covered:
+
+- ``sum``, ``nansum``, ``cumsum``, ``nancumsum``, ``mean``, ``nanmean``,
+  ``average``, ``median``, ``nanmedian`` — reduce in the **linear** domain and
+  return the result in the array's own log unit. ``[0, 3, 6] dBm`` sums to
+  ``8.44 dBm`` (≈ 7 mW), not ``9 dBm``.
+- ``max``, ``min`` and their ``nan``/``arg`` variants are order-preserving, so
+  pint's log-domain result is already correct and is left alone.
+- ``diff``, ``ptp``, ``std``, ``nanstd`` — differences between levels are
+  ratios, so these return **dB**.
+- ``prod``, ``cumprod``, ``var`` (and ``nan`` variants) — not physically
+  meaningful on logarithmic values; raise :class:`LogArithmeticError`.
+
+A **ratio array** (``dB``) reduces in the dB domain as pint already does
+(``sum`` cascades gains, ``mean`` is the average gain); only the rejected
+operations above are changed for it.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 
@@ -175,6 +193,67 @@ def install_log_arithmetic(registry: Any) -> type:
             "`(p.to('mW') * 2).to('dBm')` or `a.to('mW') / b.to('mW')`."
         )
 
+    # --- array reductions ---------------------------------------------------
+    # Reductions that combine levels: done in the linear domain, result in the
+    # array's own log unit. (max/min are order-preserving and need no change.)
+    _linear_reductions = {
+        np.sum, np.nansum, np.cumsum, np.nancumsum,
+        np.mean, np.nanmean, np.average, np.median, np.nanmedian,
+    }
+    # Reductions that express differences between levels: those are ratios, so
+    # they are computed on the dB magnitudes and returned in dB.
+    _db_reductions = {np.diff, np.ptp, np.std, np.nanstd}
+    # Reductions with no physical meaning on logarithmic values.
+    _rejected_reductions = {
+        np.prod, np.nanprod, np.cumprod, np.nancumprod, np.var, np.nanvar,
+    }
+
+    def _linearize(x: Any) -> Any:
+        """A log-power quantity as linear base units; anything else unchanged."""
+        return _linear_power(x) if _classify(x) == LOGPOWER else x
+
+    def _relog(result: Any, unit: Any) -> Any:
+        """Express a linear-power result (or tuple of them) back in `unit`."""
+        if isinstance(result, tuple):
+            return tuple(_relog(r, unit) for r in result)
+        if isinstance(result, base) and result.dimensionality == power_dim:
+            return result.to(unit)
+        return result
+
+    def _reduce_log(self: Any, func: Any, args: tuple, kwargs: dict) -> Any:
+        """Apply `func` (a numpy reduction) to a logarithmic array per the rules above."""
+        kind = _classify(self)
+        if func in _rejected_reductions:
+            raise LogArithmeticError(
+                f"numpy.{func.__name__} is not physically meaningful on a "
+                "logarithmic quantity (dBm, dBW, dB). Convert to a linear unit "
+                "first (e.g. `.to('mW')`) if that is what you intend."
+            )
+        if func in _db_reductions:
+            magnitudes = tuple(a.magnitude if isinstance(a, base) else a for a in args)
+            return _make(func(*magnitudes, **kwargs), "dB")
+        if func in _linear_reductions and kind == LOGPOWER:
+            linear_args = tuple(_linearize(a) for a in args)
+            linear_kwargs = {k: _linearize(v) for k, v in kwargs.items()}
+            return _relog(func(*linear_args, **linear_kwargs), self.units)
+        return NotImplemented
+
+    def _method(name: str, func: Any) -> Callable[..., Any]:
+        """Build the method form of a reduction (``q.sum()`` alongside ``np.sum(q)``).
+
+        Logarithmic quantities go through the numpy function so the rules above
+        apply; everything else keeps pint's own method behaviour.
+        """
+
+        def method(self: Any, *args: Any, **kwargs: Any) -> Any:
+            if _classify(self) in _LOG:
+                return func(self, *args, **kwargs)
+            return base.__getattr__(self, name)(*args, **kwargs)
+
+        method.__name__ = name
+        method.__doc__ = f"``numpy.{name}`` of the quantity; see :mod:`labkit.units._logarithmic`."
+        return method
+
     class LogAwareQuantity(base):  # type: ignore[valid-type, misc]
         """A pint quantity with physically-correct logarithmic-unit arithmetic.
 
@@ -182,6 +261,21 @@ def install_log_arithmetic(registry: Any) -> type:
         """
 
         __slots__ = ()
+
+        def __array_function__(self, func: Any, types: Any, args: Any, kwargs: Any) -> Any:
+            if _classify(self) in _LOG:
+                result = _reduce_log(self, func, args, kwargs)
+                if result is not NotImplemented:
+                    return result
+            return base.__array_function__(self, func, types, args, kwargs)
+
+        sum = _method("sum", np.sum)
+        mean = _method("mean", np.mean)
+        cumsum = _method("cumsum", np.cumsum)
+        std = _method("std", np.std)
+        var = _method("var", np.var)
+        ptp = _method("ptp", np.ptp)
+        cumprod = _method("cumprod", np.cumprod)
 
         def __add__(self, other: Any) -> Any:
             ak, bk = _classify(self), _classify(other)

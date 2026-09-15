@@ -7,6 +7,8 @@ are exact rather than dependent on rounded dB values.
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import pytest
 
@@ -108,6 +110,124 @@ def test_arrays_elementwise() -> None:
     b = Q(np.array([3.0, 6.0]), "dBm") - Q(0, "dBm")
     assert str(b.units) == "dB"
     np.testing.assert_allclose(b.magnitude, [3.0, 6.0])
+
+
+# --- array reductions -------------------------------------------------------
+
+LEVELS_MW = [1.0, MW_3DB, 10 ** 0.6]  # linear equivalents of [0, 3, 6] dBm
+
+
+def _levels() -> Any:
+    return Q(np.array([0.0, 3.0, 6.0]), "dBm")
+
+
+def _q(result: object) -> Any:
+    """Launder a numpy-typed result so the quantity attributes type-check."""
+    return result
+
+
+def test_sum_of_log_power_array_is_linear_and_in_the_log_unit() -> None:
+    total = _levels().sum()
+    assert str(total.units) == "dBm"
+    assert total.to("mW").magnitude == pytest.approx(sum(LEVELS_MW))
+    assert total.magnitude == pytest.approx(10 * np.log10(sum(LEVELS_MW)))  # ~8.44 dBm, not 9
+    # the numpy function form agrees with the method form
+    assert _q(np.sum(_levels())).magnitude == pytest.approx(total.magnitude)
+    assert _q(np.nansum(_levels())).magnitude == pytest.approx(total.magnitude)
+
+
+def test_mean_average_median_of_log_power_array() -> None:
+    levels = _levels()
+    linear_mean = sum(LEVELS_MW) / 3
+    assert levels.mean().to("mW").magnitude == pytest.approx(linear_mean)
+    assert _q(np.mean(levels)).to("mW").magnitude == pytest.approx(linear_mean)
+    assert _q(np.nanmean(levels)).to("mW").magnitude == pytest.approx(linear_mean)
+    assert _q(np.average(levels)).to("mW").magnitude == pytest.approx(linear_mean)
+    assert str(_q(np.mean(levels)).units) == "dBm"
+    # weighted average is also linear-domain
+    weighted = _q(np.average(levels, weights=[1.0, 0.0, 0.0]))
+    assert weighted.to("mW").magnitude == pytest.approx(1.0)
+    # median: the middle element (3 dBm) either way
+    assert _q(np.median(levels)).magnitude == pytest.approx(3.0)
+
+
+def test_cumsum_of_log_power_array() -> None:
+    running = _q(np.cumsum(_levels()))
+    assert str(running.units) == "dBm"
+    np.testing.assert_allclose(running.to("mW").magnitude, np.cumsum(LEVELS_MW))
+    np.testing.assert_allclose(_levels().cumsum().to("mW").magnitude, np.cumsum(LEVELS_MW))
+
+
+def test_reductions_keep_the_dbw_reference() -> None:
+    levels: Any = Q(np.array([0.0, 0.0]), "dBW")  # 1 W + 1 W
+    total = levels.sum()
+    assert str(total.units) == "dBW"
+    assert total.to("W").magnitude == pytest.approx(2.0)
+
+
+def test_reductions_along_an_axis() -> None:
+    grid: Any = Q(np.array([[0.0, 0.0], [3.0, 3.0]]), "dBm")
+    by_column = _q(np.sum(grid, axis=0))
+    assert by_column.shape == (2,)
+    np.testing.assert_allclose(by_column.to("mW").magnitude, [1 + MW_3DB, 1 + MW_3DB])
+    np.testing.assert_allclose(grid.mean(axis=1).to("mW").magnitude, [1.0, MW_3DB])
+
+
+def test_max_and_min_are_unchanged_and_exact() -> None:
+    levels = _levels()
+    assert levels.max() == Q(6, "dBm")
+    assert levels.min() == Q(0, "dBm")
+    assert np.max(levels) == Q(6, "dBm")
+    assert np.nanmin(levels) == Q(0, "dBm")
+    assert np.argmax(levels) == 2
+
+
+def test_differences_between_levels_are_db_ratios() -> None:
+    levels = _levels()
+    spread = _q(np.ptp(levels))
+    assert str(spread.units) == "dB"
+    assert spread.magnitude == pytest.approx(6.0)
+    steps = _q(np.diff(levels))
+    assert str(steps.units) == "dB"
+    np.testing.assert_allclose(steps.magnitude, [3.0, 3.0])
+    assert str(levels.std().units) == "dB"
+    assert levels.std().magnitude == pytest.approx(np.std([0.0, 3.0, 6.0]))
+    assert str(_q(np.nanstd(levels)).units) == "dB"
+
+
+def test_ratio_array_reductions_stay_in_db() -> None:
+    gains: Any = Q(np.array([3.0, 3.0]), "dB")
+    assert gains.sum() == Q(6, "dB")  # cascade
+    assert np.mean(gains) == Q(3, "dB")
+    assert np.ptp(gains) == Q(0, "dB")
+
+
+@pytest.mark.parametrize(
+    "op",
+    [
+        lambda: np.prod(_levels()),
+        lambda: _levels().prod(),
+        lambda: np.cumprod(_levels()),
+        lambda: _levels().cumprod(),
+        lambda: np.var(_levels()),
+        lambda: _levels().var(),
+        lambda: np.prod(Q(np.array([1.0, 2.0]), "dB")),
+    ],
+)
+def test_meaningless_reductions_raise(op) -> None:  # type: ignore[no-untyped-def]
+    with pytest.raises(LogArithmeticError):
+        op()
+
+
+def test_linear_array_reductions_are_unchanged() -> None:
+    powers: Any = Q(np.array([1.0, 2.0, 3.0]), "mW")
+    assert powers.sum() == Q(6, "mW")
+    assert np.mean(powers) == Q(2, "mW")
+    assert np.cumsum(powers)[-1] == Q(6, "mW")
+    assert str(_q(np.std(powers)).units) == "mW"
+    freqs: Any = Q(np.array([1.0, 3.0]), "GHz")
+    assert freqs.mean() == Q(2, "GHz")
+    assert np.ptp(freqs) == Q(2, "GHz")
 
 
 # --- non-logarithmic operations are unchanged -------------------------------

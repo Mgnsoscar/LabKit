@@ -59,6 +59,31 @@ Q(3, "dB")  + Q(3, "dB")      # cascade gains  ->  6 dB
 
 `dB` is treated as a **power** ratio (`10·log10`), consistent with `dBm`.
 
+### Arrays and reductions
+
+A `dBm` array reduces the same way, in the linear domain — with both the numpy
+function form and the method form:
+
+```python
+levels = quantity([0, 3, 6], "dBm")        # 1 mW, ~2 mW, ~4 mW
+
+levels.sum()          # 8.44 dBm  (≈ 7 mW), not 9 dBm
+np.mean(levels)       # 3.66 dBm  (≈ 2.3 mW)
+np.cumsum(levels)     # running total, in dBm
+levels.max()          # 6 dBm     (order-preserving: unchanged)
+np.ptp(levels)        # 6 dB      (a spread between levels is a ratio)
+np.diff(levels)       # [3, 3] dB
+levels.std()          # 2.45 dB
+np.prod(levels)       # raises LogArithmeticError
+```
+
+| Reduction | On a `dBm`/`dBW` array | On a `dB` array |
+|-----------|------------------------|-----------------|
+| `sum`, `nansum`, `cumsum`, `mean`, `nanmean`, `average`, `median` | linear domain, result in the same log unit | dB domain (cascade / average gain) |
+| `max`, `min`, `argmax`, … | unchanged (order-preserving) | unchanged |
+| `diff`, `ptp`, `std`, `nanstd` | `dB` | `dB` |
+| `prod`, `cumprod`, `var` | `LogArithmeticError` | `LogArithmeticError` |
+
 ## API reference
 
 ::: labkit.units.quantity
