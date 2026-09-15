@@ -50,8 +50,13 @@ __all__ = [
 # --- outgoing: quantity -> SCPI number --------------------------------------
 
 def scpi_number(value: float) -> str:
-    """Format a number for a TGR command (plain decimal, full precision)."""
-    return repr(float(value))
+    """Format a number for a TGR command.
+
+    The value is first rounded to 15 significant digits so that unit
+    conversions do not leak binary-float artefacts into the command; 15 digits
+    is far beyond the instrument's setting resolution.
+    """
+    return repr(float(f"{float(value):.15g}"))
 
 
 def megahertz(frequency: Quantity) -> str:

@@ -35,8 +35,14 @@ __all__ = [
 # --- outgoing: quantity -> SCPI number --------------------------------------
 
 def scpi_number(value: float) -> str:
-    """Format a number for a SCPI command (plain decimal, full precision)."""
-    return repr(float(value))
+    """Format a number for a SCPI command.
+
+    The value is first rounded to 15 significant digits so that unit
+    conversions do not leak binary-float artefacts into the command
+    (``2.3 GHz`` -> ``2300000000.0``, not ``2300000000.0000005``); 15 digits is
+    far beyond any instrument's setting resolution.
+    """
+    return repr(float(f"{float(value):.15g}"))
 
 
 def hz(q: Quantity) -> str:
