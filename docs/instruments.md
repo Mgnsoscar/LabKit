@@ -172,6 +172,56 @@ ends.
     `TCPIP0::<ip>::9221::SOCKET`, takes line-feed command terminators, and
     replies with `CR`/`LF`.
 
+### Keysight/Agilent MXG
+
+The microwave signal-generator driver is the Keysight/Agilent
+[`N5183A`][labkit.instruments.drivers.keysight.n5183a.N5183A] MXG analog
+generator (100 kHz – 20 GHz). It is built from a shared
+[`AnalogSignalGenerator`][labkit.instruments.drivers.keysight._signal_generator.AnalogSignalGenerator]
+base so another MXG analog model (an N5181A, say) reuses the same menus:
+
+```python
+from labkit.units import quantity
+from labkit.instruments import N5183A
+
+gen = ...  # an N5183A from your TestEnvironment
+
+gen.set_cw(quantity(2.45, "GHz"), quantity(-10, "dBm"))   # FREQ:CW, POW, OUTP ON
+
+gen.modulation.pulse.set_source("FREE_RUN")
+gen.modulation.pulse.set_period(quantity(100, "us"))
+gen.modulation.pulse.set_width(quantity(10, "us"))
+gen.modulation.pulse.enable(True)
+gen.power.set_modulation_enabled(True)                    # the global Mod On/Off key
+
+gen.sweep.set_type("STEP")
+gen.sweep.set_start_frequency(quantity(1, "GHz"))
+gen.sweep.set_stop_frequency(quantity(2, "GHz"))
+gen.sweep.set_points(101)
+gen.sweep.set_dwell(quantity(10, "ms"))
+gen.sweep.set_frequency_swept(True)
+gen.sweep.set_continuous(False)
+gen.sweep.single()
+```
+
+Menus: `frequency` (CW frequency and mode, offset/multiplier, frequency
+reference, carrier phase), `power` (level, RF on/off, global modulation enable,
+ALC, step attenuator, level offset/reference), `modulation` with one sub-menu
+per type — `am`, `fm`, `pm` (Option UNT) and `pulse` (Options UNU/UNW) —
+`sweep` (step and list sweeps, triggering, run control), `reference` (10 MHz
+reference selection) and `system` (preset, self-test, error queue, state
+registers). Unlike the TGR6000, every setting can be read back, and the menus
+expose `get_*` counterparts for the ones a measurement is likely to verify.
+Setters are quantity-checked and range-checked against the model. The failsafe
+`_shutdown_procedure` forces the RF output **off** when the session ends.
+
+!!! note "Settable vs. achievable level"
+    The range check on levels uses the firmware's *settable* envelope, −130 dBm
+    (Option 1E1 step attenuator) to +30 dBm. The level the hardware can actually
+    deliver depends on the installed options and on frequency; consult the
+    data sheet, and read the error queue (`gen.system.get_all_errors()`) after
+    setting a level near the edges.
+
 ## Vector network analyzers
 
 The VNA driver is the Rohde & Schwarz
@@ -244,9 +294,11 @@ freqs, levels = sa.trace.get_data()       # parses the scripted response
     All command strings are taken from the manufacturers' remote-control manuals:
     the R&S analyzers from the R&S FSVA3000/FSV3000 User Manual (1178.8520.02,
     issue 16) and the FSV3-K30 Noise Figure User Manual (1178.9432.02, issue 13);
-    the Aim-TTi TGR6000 from its Instruction Manual (Iss 9); and the R&S ZNLE18
-    from the R&S ZNL/ZNLE User Manual (1178.5966.02, issue 23). Validate against
-    your firmware version if a command behaves unexpectedly.
+    the Aim-TTi TGR6000 from its Instruction Manual (Iss 9); the R&S ZNLE18
+    from the R&S ZNL/ZNLE User Manual (1178.5966.02, issue 23); and the
+    Keysight/Agilent N5183A from the MXG Signal Generators SCPI Command
+    Reference (N5180-90004). Validate against your firmware version if a
+    command behaves unexpectedly.
 
 ## API reference
 
@@ -281,6 +333,22 @@ freqs, levels = sa.trace.get_data()       # parses the scripted response
 ::: labkit.instruments.drivers.aim_tti.reference
 
 ::: labkit.instruments.drivers.aim_tti.system
+
+::: labkit.instruments.drivers.keysight._signal_generator
+
+::: labkit.instruments.drivers.keysight.n5183a
+
+::: labkit.instruments.drivers.keysight.frequency
+
+::: labkit.instruments.drivers.keysight.power
+
+::: labkit.instruments.drivers.keysight.modulation
+
+::: labkit.instruments.drivers.keysight.sweep
+
+::: labkit.instruments.drivers.keysight.reference
+
+::: labkit.instruments.drivers.keysight.system
 
 ::: labkit.instruments.drivers.rohde_schwarz.vna._network_analyzer
 

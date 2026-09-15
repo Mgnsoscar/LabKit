@@ -160,9 +160,11 @@ pint ships.
    power, harmonics, TOI, AM depth) and the Noise Figure (K30) application
    reached through the `INSTrument` channel controls; the R&S `ZNLE18` vector network
    analyzer shares a `NetworkAnalyzer` base built the same way
-   (`labkit.instruments.drivers.rohde_schwarz.vna`); and the Aim-TTi `TGR6000` RF
+   (`labkit.instruments.drivers.rohde_schwarz.vna`); the Aim-TTi `TGR6000` RF
    signal generator shares a `SignalGenerator` base
-   (`labkit.instruments.drivers.aim_tti`). No command logic is duplicated
+   (`labkit.instruments.drivers.aim_tti`); and the Keysight/Agilent `N5183A`
+   MXG analog generator shares an `AnalogSignalGenerator` base
+   (`labkit.instruments.drivers.keysight`). No command logic is duplicated
    between models — where the prototype shipped byte-identical files per
    instrument. Every driver is tested with a scriptable `MockBackend` (no
    hardware), and its commands are verified against the manufacturer's

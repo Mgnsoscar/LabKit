@@ -15,11 +15,14 @@ Available:
   vector network analyzer (18 GHz).
 - :class:`~labkit.instruments.drivers.aim_tti.TGR6000` — Aim-TTi TGR6000
   RF signal generator (6 GHz).
+- :class:`~labkit.instruments.drivers.keysight.N5183A` — Keysight/Agilent
+  N5183A MXG microwave analog signal generator (20 GHz).
 """
 
 from __future__ import annotations
 
 from .aim_tti import TGR6000
+from .keysight import N5183A
 from .rohde_schwarz import FPL1003, FSV3007, ZNLE18
 
-__all__ = ["FSV3007", "FPL1003", "ZNLE18", "TGR6000"]
+__all__ = ["FSV3007", "FPL1003", "ZNLE18", "TGR6000", "N5183A"]
