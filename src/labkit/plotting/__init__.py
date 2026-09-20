@@ -21,8 +21,13 @@ from __future__ import annotations
 
 from ._literals import ColorName, FontName, LegendLoc, LineStyle, MarkerStyle
 from .objects import (
+    Annotation,
+    ColorLike,
+    FigureTitle,
     GridMajor,
     GridMinor,
+    HLine,
+    Layout,
     Legend,
     LinePlot,
     LinScale,
@@ -31,7 +36,11 @@ from .objects import (
     MarkerLine,
     Panel,
     PlotObject,
+    Span,
+    Swatch,
+    Text,
     Title,
+    VLine,
     XLabel,
     XLimits,
     XTicks,
@@ -40,15 +49,27 @@ from .objects import (
     YTicks,
 )
 from .plot import plot, set_default_font
+from .theme import DEFAULT_THEME, Theme
 
 __all__ = [
     "plot",
     "set_default_font",
+    "Theme",
+    "DEFAULT_THEME",
     "PlotObject",
     "Panel",
+    "Layout",
+    "FigureTitle",
     "LinePlot",
     "Marker",
     "MarkerLine",
+    "Span",
+    "VLine",
+    "HLine",
+    "Annotation",
+    "Text",
+    "Swatch",
+    "ColorLike",
     "Title",
     "XLabel",
     "YLabel",
