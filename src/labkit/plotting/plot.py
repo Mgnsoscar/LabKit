@@ -546,11 +546,14 @@ def plot(
 
         if figure_title is not None:
             x = layout.left if layout is not None and layout.left is not None else 0.06
+            title_size = figure_title.size or 16
             fig.text(x, 0.975, figure_title.text, ha="left", va="top", color=theme.ink, fontweight="bold",
-                     fontsize=figure_title.size or 15)
+                     fontsize=title_size)
             if figure_title.subtitle:
-                fig.text(x, 0.935, figure_title.subtitle, ha="left", va="top", color=theme.ink_secondary,
-                         fontsize=figure_title.subtitle_size or 10)
+                # the subtitle line sits one title height below the title, whatever the figure height
+                drop = 1.6 * title_size / 72 / figsize[1]
+                fig.text(x, 0.975 - drop, figure_title.subtitle, ha="left", va="top", color=theme.ink_secondary,
+                         fontsize=figure_title.subtitle_size or 12)
 
         if layout is None:
             fig.tight_layout(rect=(0, 0, 1, 0.92) if figure_title is not None else None)

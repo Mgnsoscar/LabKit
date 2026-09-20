@@ -49,7 +49,7 @@ class Theme:
     good: str = "#0ca30c"
     critical: str = "#d03b3b"
     font: str = "DejaVu Sans"
-    font_size: float = 9.5
+    font_size: float = 12.0
     #: The alpha a :class:`~labkit.plotting.objects.Span` is washed with unless it says otherwise.
     span_alpha: float = 0.45
     _extra: dict[str, Any] = field(default_factory=dict, repr=False)
