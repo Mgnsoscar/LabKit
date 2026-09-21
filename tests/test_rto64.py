@@ -284,3 +284,52 @@ def test_system_commands_and_error_queue() -> None:
     assert scope.system.get_all_errors() == []
     be.on("SYST:ERR:ALL?", '-222,"Data out of range",-100,"Command error"')
     assert len(scope.system.get_all_errors()) == 2
+
+
+# -- fast segmentation and history --------------------------------------------------------
+
+def test_fast_segmentation_and_history_timestamps() -> None:
+    scope, be = _scope()
+    scope.acquisition.set_fast_segmentation(True, max_segments=5000)
+    scope.history.enable(1, True)
+    assert be.writes == ["ACQ:SEGM:STAT ON", "ACQ:SEGM:MAX 5000", "CHAN1:WAV1:HIST:STAT ON"]
+    be.on("ACQ:AVA?", "3")
+    assert scope.history.available() == 3
+
+    selected = {"index": 0}
+
+    def responder(query: str) -> str:
+        if query == "CHAN1:WAV1:HIST:CURR?":
+            return str(selected["index"])
+        if query == "CHAN1:WAV1:HIST:TSD?":
+            return "'2026-09-21'"
+        if query == "CHAN1:WAV1:HIST:TSAB?":
+            return f"'10:00:0{3 + selected['index']}.250000000'"
+        if query == "CHAN1:WAV1:HIST:TSR?":
+            return {0: "0", -1: "-1.5 ms", -2: "-2.25E-3"}[selected["index"]]
+        return ""
+
+    scope2, be2 = mock_instrument(RTO64, responses=responder)
+    original_write = be2.write
+
+    def write(command: str) -> None:
+        original_write(command)
+        if command.startswith("CHAN1:WAV1:HIST:CURR "):
+            selected["index"] = int(command.split()[-1])
+
+    be2.write = write  # type: ignore[method-assign]
+    stamps = scope2.history.timestamps(1, 3)
+    assert [s.index for s in stamps] == [-2, -1, 0]
+    assert [s.relative for s in stamps] == pytest.approx([-2.25e-3, -1.5e-3, 0.0])
+    assert stamps[0].date == "2026-09-21" and stamps[0].time == "10:00:01.250000000"
+    assert be2.writes[-1] == "CHAN1:WAV1:HIST:CURR 0"
+    with pytest.raises(ValueError):
+        scope.history.select(1, 1)
+    with pytest.raises(ValueError):
+        scope.acquisition.set_fast_segmentation(True, max_segments=1)
+
+
+def test_system_clock() -> None:
+    scope, be = _scope()
+    be.on("SYST:DATE?", "2026,9,21").on("SYST:TIME?", "15,09,20")
+    assert scope.system.get_datetime().isoformat() == "2026-09-21T15:09:20"

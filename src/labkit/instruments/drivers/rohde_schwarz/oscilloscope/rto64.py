@@ -26,7 +26,8 @@ class RTO64(Oscilloscope):
     Exposes the instrument through menus — ``channel(n)`` (vertical, coupling,
     bandwidth limit, probe attenuation, arithmetic), ``timebase``,
     ``acquisition`` (sample rate, record length, count, interpolation),
-    ``trigger``, ``waveform`` (record transfer), ``measurement`` (automatic
+    ``trigger``, ``waveform`` (record transfer), ``history`` (stored
+    acquisitions and their timestamps), ``measurement`` (automatic
     amplitude/time measurements with statistics), ``math`` (expressions and
     FFT) and ``system`` — plus :meth:`~...Oscilloscope.run`,
     :meth:`~...Oscilloscope.run_single`, :meth:`~...Oscilloscope.stop` and

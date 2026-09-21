@@ -3,12 +3,13 @@
 Verified against the *R&S RTO6 User Manual*, chapters 24.6 "General remote
 settings", 24.7 "Instrument setup" and 24.8.14 "Reference clock":
 ``SYSTem:DISPlay:UPDate``, ``SYSTem:PRESet``, ``SYSTem:KLOCk``,
-``SYSTem:DEVice:ID?``, ``SENSe[:ROSCillator]:SOURce``,
+``SYSTem:DEVice:ID?``, ``SYSTem:DATE?``, ``SYSTem:TIME?``, ``SENSe[:ROSCillator]:SOURce``,
 ``SENSe[:ROSCillator]:EXTernal:FREQuency`` and ``SYSTem:ERRor:ALL?``.
 """
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from .....units import Quantity, ensure_frequency
@@ -42,6 +43,16 @@ class System(Menu):
     def get_device_id(self) -> str:
         """Part number and serial number (``SYST:DEV:ID?``)."""
         return c.parse_name(self.query("SYST:DEV:ID?"))
+
+    def get_datetime(self) -> datetime:
+        """The instrument's clock (``SYST:DATE?`` and ``SYST:TIME?``, the latter in UTC per the manual).
+
+        The history timestamps come from this clock; compare it with the PC's
+        once at the start of a long run and log the offset.
+        """
+        y, mo, d = (int(float(v)) for v in self.query("SYST:DATE?").split(","))
+        h, mi, s = (int(float(v)) for v in self.query("SYST:TIME?").split(","))
+        return datetime(y, mo, d, h, mi, s)
 
     def set_reference_source(self, source: ReferenceSource) -> None:
         """Use the internal OCXO or an external reference (``SENS:ROSC:SOUR``)."""

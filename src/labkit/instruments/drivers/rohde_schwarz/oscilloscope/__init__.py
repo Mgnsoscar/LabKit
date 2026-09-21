@@ -4,7 +4,7 @@
 - :class:`RTO64` — the four-channel RTO6 model.
 
 Menus: :class:`Channel` (``scope.channel(n)``), :class:`Timebase`,
-:class:`Acquisition`, :class:`Trigger`, :class:`Waveform`,
+:class:`Acquisition`, :class:`Trigger`, :class:`Waveform`, :class:`History`,
 :class:`Measurement`, :class:`Math` and :class:`System`.
 """
 
@@ -14,6 +14,7 @@ from ._common import WaveformHeader
 from ._oscilloscope import Oscilloscope
 from .acquisition import Acquisition
 from .channel import Channel
+from .history import History, HistoryTimestamp
 from .math import Math
 from .measurement import Measurement
 from .rto64 import RTO64
@@ -31,6 +32,8 @@ __all__ = [
     "Trigger",
     "Waveform",
     "WaveformHeader",
+    "History",
+    "HistoryTimestamp",
     "Measurement",
     "Math",
     "System",

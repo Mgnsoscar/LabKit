@@ -3,12 +3,13 @@
 Verified against the *R&S RTO6 User Manual*, chapter 24.8.3 "Acquisition":
 ``ACQuire:SRATe``, ``ACQuire:POINts[:VALue]``, ``ACQuire:POINts:AUTO``,
 ``ACQuire:POINts:MAXimum``, ``ACQuire:POINts:ARATe?``, ``ACQuire:RESolution``,
-``ACQuire:COUNt`` and ``ACQuire:INTerpolate``.
+``ACQuire:COUNt``, ``ACQuire:INTerpolate``, ``ACQuire:SEGMented:STATe`` and
+``ACQuire:SEGMented:MAX``.
 """
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Optional
 
 from .....units import Quantity, ensure_frequency, ensure_time, quantity
 from ....base import Menu
@@ -88,6 +89,22 @@ class Acquisition(Menu):
 
     def get_interpolation(self) -> str:
         return self.query("ACQ:INT?").strip()
+
+    # -- fast segmentation ----------------------------------------------------
+    def set_fast_segmentation(self, enabled: bool, max_segments: Optional[int] = None) -> None:
+        """Switch fast segmentation on or off (``ACQ:SEGM:STAT``) and set the series size (``ACQ:SEGM:MAX``).
+
+        With fast segmentation the instrument re-arms in microseconds and keeps
+        up to `max_segments` acquisitions in memory (2 – 16 777 215), each with
+        its own timestamp — the way to catch bursts of rare events. A single
+        run (``RUNSingle``) stops after `max_segments` acquisitions; stop it
+        earlier with ``STOP`` and read what was captured through the history.
+        """
+        self.write(f"ACQ:SEGM:STAT {c.onoff(enabled)}")
+        if max_segments is not None:
+            if not 2 <= max_segments <= 16_777_215:
+                raise ValueError("max_segments must be between 2 and 16777215.")
+            self.write(f"ACQ:SEGM:MAX {int(max_segments)}")
 
     def restart_arithmetics(self) -> None:
         """Restart averaging / envelope calculation now (``ACQ:ARES:IMM``)."""

@@ -26,6 +26,7 @@ from .....units import Quantity, quantity
 from ....base import Backend, BaseInstrument
 from .acquisition import Acquisition
 from .channel import Channel
+from .history import History
 from .math import Math
 from .measurement import Measurement
 from .system import System
@@ -62,6 +63,7 @@ class Oscilloscope(BaseInstrument):
     acquisition: Acquisition
     trigger: Trigger
     waveform: Waveform
+    history: History
     measurement: Measurement
     math: Math
     system: System
@@ -79,6 +81,7 @@ class Oscilloscope(BaseInstrument):
         self.acquisition = Acquisition(self)
         self.trigger = Trigger(self)
         self.waveform = Waveform(self)
+        self.history = History(self)
         self.measurement = Measurement(self)
         self.math = Math(self)
         self.system = System(self)
