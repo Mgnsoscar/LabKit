@@ -299,6 +299,54 @@ Frequency setters are quantity- and range-checked against the model. The failsaf
     each standard to compute the error terms) is intentionally left to explicit,
     manual scripting against the cal kit in use.
 
+## Oscilloscopes
+
+The oscilloscope driver is the Rohde & Schwarz
+[`RTO64`][labkit.instruments.drivers.rohde_schwarz.oscilloscope.rto64.RTO64]
+(4 channels, 600 MHz base bandwidth, up to 6 GHz by option, 20 GSa/s). It is
+built on a shared
+[`Oscilloscope`][labkit.instruments.drivers.rohde_schwarz.oscilloscope._oscilloscope.Oscilloscope]
+base for the RTO6 family:
+
+```python
+from labkit.units import quantity
+from labkit.instruments import RTO64
+
+scope = ...  # an RTO64 from your TestEnvironment
+
+scope.system.set_display_update(False)         # faster while scripted
+ch = scope.channel(1)
+ch.enable(True)
+ch.set_coupling("DC")                          # 50 Ω input
+ch.set_scale(quantity(100, "mV"))              # per division
+scope.timebase.set_scale(quantity(20, "ns"))
+scope.acquisition.set_sample_rate(quantity(10, "GHz"))
+scope.acquisition.set_count(16)                # acquisitions per single run (and for averaging)
+scope.trigger.edge("CH1", quantity(0, "V"), slope="POSITIVE", mode="NORMAL")
+
+t, v = scope.acquire(1)                        # single run -> (time, voltage) quantity arrays
+f = scope.measurement.measure("FREQUENCY", "CH1")   # a quantity in Hz
+
+scope.math.fft("CH1", center=quantity(600, "MHz"), span=quantity(100, "MHz"), rbw=quantity(100, "kHz"))
+scope.run_single()
+freq, spectrum = scope.waveform.get_math_data(1, x_unit="Hz", y_unit="dBm")
+```
+
+The menus: `channel(n)` (on/off, scale/range/offset/position, coupling,
+bandwidth limit, inversion, probe attenuation, averaging/envelope
+arithmetic, overload), `timebase` (scale, range, position, reference),
+`acquisition` (sample rate, record length, resolution, count, interpolation),
+`trigger` (mode, source, type, edge slope, per-source level, find level,
+force, holdoff), `waveform` (record transfer with the header-derived time
+or frequency axis), `measurement` (the ten measurement groups: main and
+additional amplitude/time measurements, one or two sources, statistics,
+results as quantities in their natural unit), `math` (expressions and the
+FFT settings) and `system` (display update, preset, key lock, reference
+clock, error queue). Records are transferred as ASCII with the x values
+rebuilt from the header, which keeps the transport a plain text query.
+The failsafe `_shutdown_procedure` switches the display update on and
+returns the scope to continuous acquisition.
+
 ## Testing drivers without hardware
 
 [`mock_instrument`][labkit.instruments.mock.mock_instrument] wires a real driver
@@ -322,7 +370,8 @@ freqs, levels = sa.trace.get_data()       # parses the scripted response
     the R&S analyzers from the R&S FSVA3000/FSV3000 User Manual (1178.8520.02,
     issue 16) and the FSV3-K30 Noise Figure User Manual (1178.9432.02, issue 13);
     the Aim-TTi TGR6000 from its Instruction Manual (Iss 9); the R&S ZNLE18
-    from the R&S ZNL/ZNLE User Manual (1178.5966.02, issue 23); and the
+    from the R&S ZNL/ZNLE User Manual (1178.5966.02, issue 23); the R&S RTO64
+    from the R&S RTO6 User Manual (1801.6687.02), chapter 24; and the
     Keysight/Agilent N5183A from the MXG Signal Generators SCPI Command
     Reference (N5180-90004). Validate against your firmware version if a
     command behaves unexpectedly.
@@ -402,3 +451,23 @@ freqs, levels = sa.trace.get_data()       # parses the scripted response
 ::: labkit.instruments.drivers.rohde_schwarz.vna.display
 
 ::: labkit.instruments.registry
+
+::: labkit.instruments.drivers.rohde_schwarz.oscilloscope._oscilloscope
+
+::: labkit.instruments.drivers.rohde_schwarz.oscilloscope.rto64
+
+::: labkit.instruments.drivers.rohde_schwarz.oscilloscope.channel
+
+::: labkit.instruments.drivers.rohde_schwarz.oscilloscope.timebase
+
+::: labkit.instruments.drivers.rohde_schwarz.oscilloscope.acquisition
+
+::: labkit.instruments.drivers.rohde_schwarz.oscilloscope.trigger
+
+::: labkit.instruments.drivers.rohde_schwarz.oscilloscope.waveform
+
+::: labkit.instruments.drivers.rohde_schwarz.oscilloscope.measurement
+
+::: labkit.instruments.drivers.rohde_schwarz.oscilloscope.math
+
+::: labkit.instruments.drivers.rohde_schwarz.oscilloscope.system

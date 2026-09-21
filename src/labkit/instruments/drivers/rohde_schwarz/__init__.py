@@ -9,6 +9,9 @@ from reusable per-topic menus, with thin concrete models on top:
 - **Vector network analyzers** (:class:`ZNLE18`) over the
   :class:`~labkit.instruments.drivers.rohde_schwarz.vna.NetworkAnalyzer` base and
   the menus in the :mod:`.vna` subpackage.
+- **Oscilloscopes** (:class:`RTO64`) over the
+  :class:`~labkit.instruments.drivers.rohde_schwarz.oscilloscope.Oscilloscope`
+  base and the menus in the :mod:`.oscilloscope` subpackage.
 """
 
 from __future__ import annotations
@@ -25,9 +28,12 @@ from .noise_figure import NoiseFigure
 from .sweep import Sweep
 from .system import Display, ReferenceOscillator
 from .trace import Trace
+from .oscilloscope import RTO64, Oscilloscope
 from .vna import NetworkAnalyzer, ZNLE18
 
 __all__ = [
+    "RTO64",
+    "Oscilloscope",
     "FSV3007",
     "FPL1003",
     "SpectrumAnalyzer",

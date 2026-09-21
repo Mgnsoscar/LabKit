@@ -29,7 +29,9 @@ LabKit gives you three things that work together:
 > **`FSV3007` and `FPL1003` spectrum analyzers** (with the Spectrum measurement
 > functions — channel power, ACLR, OBW, SEM, harmonics, TOI, AM depth — and the
 > **Noise Figure** application), the R&S **`ZNLE18` 18 GHz vector network
-> analyzer**, the Aim-TTi **`TGR6000` 6 GHz RF signal generator**, and the
+> analyzer**, the R&S **`RTO64` oscilloscope** (4 channels, 600 MHz – 6 GHz by
+> option, with waveform transfer, automatic measurements and FFT), the Aim-TTi
+> **`TGR6000` 6 GHz RF signal generator**, and the
 > Keysight/Agilent **`N5183A` MXG 20 GHz analog signal generator** (with
 > AM/FM/ΦM/pulse modulation and step/list sweeps), each built from reusable
 > per-topic menus over a shared base. Public APIs may still change before 1.0.

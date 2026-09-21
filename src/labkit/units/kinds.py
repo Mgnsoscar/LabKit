@@ -32,6 +32,8 @@ __all__ = [
     "ensure_power",
     "ensure_time",
     "ensure_angle",
+    "is_voltage",
+    "ensure_voltage",
 ]
 
 
@@ -64,6 +66,11 @@ def is_time(q: object) -> bool:
 def is_angle(q: object) -> bool:
     """Return ``True`` if `q` is an angle (deg, rad, ...)."""
     return _has_dimensionality(q, "rad")
+
+
+def is_voltage(q: object) -> bool:
+    """Return ``True`` if `q` is a voltage (V, mV, ...)."""
+    return _has_dimensionality(q, "V")
 
 
 def is_dimensionless_decibel(q: object) -> bool:
@@ -113,3 +120,8 @@ def ensure_time(q: object) -> Quantity:
 def ensure_angle(q: object) -> Quantity:
     """Return `q` if it is an angle, else raise :class:`DimensionalityError`."""
     return _ensure(q, is_angle, "angle", "deg, rad")
+
+
+def ensure_voltage(q: object) -> Quantity:
+    """Return `q` if it is a voltage, else raise :class:`DimensionalityError`."""
+    return _ensure(q, is_voltage, "voltage", "V, mV")
