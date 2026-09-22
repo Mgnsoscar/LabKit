@@ -306,6 +306,8 @@ def test_fast_segmentation_and_history_timestamps() -> None:
     selected = {"index": 0}
 
     def responder(query: str) -> str:
+        if query == "*OPC?":
+            return "1"
         if query == "CHAN1:WAV1:HIST:CURR?":
             return str(selected["index"])
         if query == "CHAN1:WAV1:HIST:TSD?":
@@ -330,6 +332,9 @@ def test_fast_segmentation_and_history_timestamps() -> None:
     assert [s.relative for s in stamps] == pytest.approx([-2.25e-3, -1.5e-3, 0.0])
     assert stamps[0].date == "2026-09-21" and stamps[0].time == "10:00:01.250000000"
     assert be2.writes[-1] == "CHAN1:WAV1:HIST:CURR 0"
+    assert be2.queries.count("*OPC?") == 3                   # every selection waited for the instrument
+    scope2.history.select(1, -1, wait=False)
+    assert be2.queries.count("*OPC?") == 3
     with pytest.raises(ValueError):
         scope.history.select(1, 1)
     with pytest.raises(ValueError):

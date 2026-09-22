@@ -5,7 +5,8 @@ maximum, see :meth:`~.acquisition.Acquisition.set_fast_segmentation`). After
 ``STOP`` they are addressed by a history index: 0 is the newest, −1 the one
 before, down to ``-(n-1)`` for the oldest of `n` available acquisitions.
 Selecting an index makes it the channel's current waveform, so its data and
-timestamps can be read like a live one.
+timestamps can be read like a live one — once the instrument has processed
+the selection, which is why :meth:`History.select` waits for ``*OPC?``.
 
 Verified against the *R&S RTO6 User Manual*, chapter 24.10.7 "History":
 ``CHANnel<m>[:WAVeform<n>]:HISTory[:STATe]``, ``:HISTory:CURRent``,
@@ -60,15 +61,29 @@ class History(Menu):
         """The number of acquisitions saved in memory (``ACQ:AVA?``)."""
         return c.parse_int(self.query("ACQ:AVA?"))
 
-    def enable(self, channel: int, enabled: bool = True, waveform: int = 1) -> None:
-        """Switch the history view of the channel on or off (``CHAN<m>:WAV<n>:HIST:STAT``)."""
-        self.write(f"{self._cmd(channel, 'STAT', waveform)} {c.onoff(enabled)}")
+    def enable(self, channel: int, enabled: bool = True, waveform: int = 1, wait: bool = True) -> None:
+        """Switch the history view of the channel on or off (``CHAN<m>:WAV<n>:HIST:STAT``).
 
-    def select(self, channel: int, index: int, waveform: int = 1) -> None:
-        """Make acquisition `index` (0 = newest, negative = older) the channel's current waveform."""
+        Starting an acquisition leaves the history, so switch it on again after
+        every ``STOP`` before selecting acquisitions. The command is
+        asynchronous; by default this waits (``*OPC?``) until it has taken effect.
+        """
+        self.write(f"{self._cmd(channel, 'STAT', waveform)} {c.onoff(enabled)}")
+        if wait:
+            self._scope.wait_for_instrument()
+
+    def select(self, channel: int, index: int, waveform: int = 1, wait: bool = True) -> None:
+        """Make acquisition `index` (0 = newest, negative = older) the channel's current waveform.
+
+        The command is asynchronous: without waiting (``*OPC?``, the default)
+        a data or timestamp query sent right after it still answers for the
+        previously selected acquisition.
+        """
         if index > 0:
             raise ValueError("History index is 0 for the newest acquisition and negative for older ones.")
         self.write(f"{self._cmd(channel, 'CURR', waveform)} {int(index)}")
+        if wait:
+            self._scope.wait_for_instrument()
 
     def get_selected(self, channel: int, waveform: int = 1) -> int:
         return c.parse_int(self.query(f"{self._cmd(channel, 'CURR', waveform)}?"))
