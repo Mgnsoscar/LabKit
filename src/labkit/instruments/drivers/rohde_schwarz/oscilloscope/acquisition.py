@@ -106,6 +106,15 @@ class Acquisition(Menu):
                 raise ValueError("max_segments must be between 2 and 16777215.")
             self.write(f"ACQ:SEGM:MAX {int(max_segments)}")
 
+    def get_max_segments(self) -> int:
+        """The fast-segmentation series size in effect (``ACQ:SEGM:MAX?``).
+
+        The instrument limits the value to what its acquisition memory holds
+        at the current record length and decimation, so read this back after
+        setting it to learn the real capacity.
+        """
+        return c.parse_int(self.query("ACQ:SEGM:MAX?"))
+
     def restart_arithmetics(self) -> None:
         """Restart averaging / envelope calculation now (``ACQ:ARES:IMM``)."""
         self.write("ACQ:ARES:IMM")

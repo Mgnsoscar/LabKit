@@ -13,7 +13,7 @@ import pytest
 from labkit.instruments import RTO64, mock_instrument
 from labkit.instruments.drivers.rohde_schwarz.oscilloscope import WaveformHeader
 from labkit.instruments.mock import MockBackend
-from labkit.units import DimensionalityError, quantity as Q
+from labkit.units import DimensionalityError, Quantity, quantity as Q
 
 _IDN = "Rohde&Schwarz,RTO,1801.6687k64/123456,5.20.1.0"
 
@@ -236,7 +236,8 @@ def test_measurement_units_sources_and_statistics() -> None:
     ]
     be.on("MEAS2:RES:AVG? DEL", "2.5e-9").on("MEAS2:RES:ACT? PHAS", "45").on("MEAS2:RES:ACT?", "7")
     be.on("MEAS2:RES:ACT? PULC", "12").on("MEAS2:RES:WFMC?", "100")
-    assert scope.measurement.get_average(2, "DELAY").to("ns").magnitude == pytest.approx(2.5)
+    delay = scope.measurement.get_average(2, "DELAY")
+    assert isinstance(delay, Quantity) and delay.to("ns").magnitude == pytest.approx(2.5)
     assert scope.measurement.get_result(2, "PHASE") == Q(45, "deg")
     assert scope.measurement.get_result(2) == 7.0            # main result, unit unknown -> number
     assert scope.measurement.get_result(2, "PULSE_COUNT") == 12.0
@@ -265,7 +266,7 @@ def test_fft_setup_and_spectrum_readout() -> None:
     be.on("CALC:MATH1:DATA?", "-60,-10,-60")
     f, s = scope.waveform.get_math_data(1, x_unit="Hz", y_unit="dBm")
     np.testing.assert_allclose(f.to("MHz").magnitude, [550, 600, 650])
-    assert s.units == Q(1, "dBm").units
+    assert isinstance(s, Quantity) and s.units == Q(1, "dBm").units
     scope.math.set_fft_rbw(1, None)
     assert be.writes[-1] == "CALC:MATH1:FFT:BAND:AUTO ON"
     be.on("CALC:MATH1:FFT:BAND:ADJ?", "97656.25")
@@ -293,6 +294,8 @@ def test_fast_segmentation_and_history_timestamps() -> None:
     scope.acquisition.set_fast_segmentation(True, max_segments=5000)
     scope.history.enable(1, True)
     assert be.writes == ["ACQ:SEGM:STAT ON", "ACQ:SEGM:MAX 5000", "CHAN1:WAV1:HIST:STAT ON"]
+    be.on("ACQ:SEGM:MAX?", "4096")               # the instrument clips the series to its memory
+    assert scope.acquisition.get_max_segments() == 4096
     be.on("ACQ:AVA?", "3")
     assert scope.history.available() == 3
 
