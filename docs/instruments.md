@@ -334,7 +334,7 @@ freq, spectrum = scope.waveform.get_math_data(1, x_unit="Hz", y_unit="dBm")
 
 The menus: `channel(n)` (on/off, scale/range/offset/position, coupling,
 bandwidth limit, inversion, probe attenuation, averaging/envelope
-arithmetic, overload), `timebase` (scale, range, position, reference),
+arithmetic, decimation, overload), `timebase` (scale, range, position, reference),
 `acquisition` (sample rate, record length, resolution, count, interpolation),
 `trigger` (mode, source, type, edge slope, per-source level, find level,
 force, holdoff), `waveform` (record transfer with the header-derived time

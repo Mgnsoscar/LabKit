@@ -58,6 +58,7 @@ def test_channel_vertical_and_input_commands() -> None:
     ch.set_impedance(50)
     ch.set_probe_attenuation(10)
     ch.set_arithmetics("AVERAGE")
+    ch.set_decimation("PEAK_DETECT")
     assert be.writes == [
         "CHAN2:STAT ON",
         "CHAN2:SCAL 0.1",
@@ -71,8 +72,11 @@ def test_channel_vertical_and_input_commands() -> None:
         "PROB2:SET:ATT:MODE MAN",
         "PROB2:SET:ATT:MAN 10.0",
         "CHAN2:WAV1:ARIT AVER",
+        "CHAN2:WAV1:TYPE PDET",
     ]
     assert ch.source == "C2W1"
+    be.on("CHAN2:WAV1:TYPE?", "PDET")
+    assert ch.get_decimation() == "PDET"
 
 
 def test_channel_getters_and_checks() -> None:

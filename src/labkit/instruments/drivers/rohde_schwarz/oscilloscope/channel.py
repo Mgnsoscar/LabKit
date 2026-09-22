@@ -3,8 +3,11 @@
 Verified against the *R&S RTO6 User Manual*, chapter 24.8 "Acquisition and
 setup": ``CHANnel<m>:STATe``, ``:SCALe``, ``:RANGe``, ``:OFFSet``,
 ``:POSition``, ``:COUPling``, ``:BANDwidth``, ``:INVert``, ``:IMPedance``,
-``:OVERload``, ``CHANnel<m>[:WAVeform<n>]:ARIThmetics`` and
-``PROBe<m>:SETup:ATTenuation:...``.
+``:OVERload``, ``CHANnel<m>[:WAVeform<n>]:ARIThmetics``,
+``CHANnel<m>[:WAVeform<n>]:TYPE`` and ``PROBe<m>:SETup:ATTenuation:...``.
+On the instrument ``ARIThmetics`` accepts ``OFF | ENVelope | AVERage`` only
+(``PDETect`` is rejected with "Invalid character data"); the decimation
+modes belong to ``TYPE``.
 """
 
 from __future__ import annotations
@@ -18,7 +21,7 @@ from . import _common as c
 if TYPE_CHECKING:
     from ._oscilloscope import Oscilloscope
 
-__all__ = ["Channel", "Coupling", "BandwidthLimit", "Arithmetics"]
+__all__ = ["Channel", "Coupling", "BandwidthLimit", "Arithmetics", "Decimation"]
 
 #: Input coupling. ``DC`` is 50 Ω, ``DC_1M`` (the instrument's ``DCLimit``) and
 #: ``AC`` are the 1 MΩ input.
@@ -30,12 +33,17 @@ _COUPLING_FROM_SCPI = {"DC": "DC", "DCL": "DC_1M", "DCLIMIT": "DC_1M", "AC": "AC
 BandwidthLimit = Literal["FULL", "200MHz", "20MHz"]
 _BANDWIDTH_SCPI = {"FULL": "FULL", "200MHz": "B200", "20MHz": "B20"}
 
-#: Waveform arithmetic applied across acquisitions / within a sample interval.
-Arithmetics = Literal["OFF", "ENVELOPE", "AVERAGE", "PEAK_DETECT", "HIGH_RESOLUTION", "RMS"]
-_ARITHMETICS_SCPI = {
-    "OFF": "OFF", "ENVELOPE": "ENV", "AVERAGE": "AVER", "PEAK_DETECT": "PDET",
-    "HIGH_RESOLUTION": "HRES", "RMS": "RMS",
-}
+#: Waveform arithmetic across acquisitions (``CHANnel<m>[:WAVeform<n>]:ARIThmetics``).
+#: The instrument accepts only these three; the per-sample-interval modes are
+#: the *decimation* (:data:`Decimation`, ``...:TYPE``).
+Arithmetics = Literal["OFF", "ENVELOPE", "AVERAGE"]
+_ARITHMETICS_SCPI = {"OFF": "OFF", "ENVELOPE": "ENV", "AVERAGE": "AVER"}
+
+#: How the ADC stream is reduced to waveform points at a lower sample rate
+#: (``CHANnel<m>[:WAVeform<n>]:TYPE``): one sample per interval, the minimum
+#: and maximum of the interval (two values per point), their average, or RMS.
+Decimation = Literal["SAMPLE", "PEAK_DETECT", "HIGH_RESOLUTION", "RMS"]
+_DECIMATION_SCPI = {"SAMPLE": "SAMP", "PEAK_DETECT": "PDET", "HIGH_RESOLUTION": "HRES", "RMS": "RMS"}
 
 
 class Channel(Menu):
@@ -143,16 +151,33 @@ class Channel(Menu):
 
     # -- arithmetic --------------------------------------------------------
     def set_arithmetics(self, mode: Arithmetics, waveform: int = 1) -> None:
-        """Set the waveform arithmetic (``CHAN<m>[:WAV<n>]:ARIT``): ``AVERAGE``,
-        ``ENVELOPE``, ``PEAK_DETECT``, ``HIGH_RESOLUTION``, ``RMS`` or ``OFF``.
+        """Set the waveform arithmetic across acquisitions (``CHAN<m>[:WAV<n>]:ARIT``):
+        ``AVERAGE``, ``ENVELOPE`` or ``OFF``.
 
         Averaging and envelope run over the number of acquisitions set with
         :meth:`~labkit.instruments.drivers.rohde_schwarz.oscilloscope.acquisition.Acquisition.set_count`.
+        Peak detect and the other per-sample-interval reductions are the
+        decimation, :meth:`set_decimation`.
         """
         self.write(f"CHAN{self.number}:WAV{waveform}:ARIT {_ARITHMETICS_SCPI[mode]}")
 
     def get_arithmetics(self, waveform: int = 1) -> str:
         return self.query(f"CHAN{self.number}:WAV{waveform}:ARIT?").strip()
+
+    # -- decimation --------------------------------------------------------
+    def set_decimation(self, mode: Decimation, waveform: int = 1) -> None:
+        """Set how the ADC stream becomes waveform points (``CHAN<m>[:WAV<n>]:TYPE``):
+        ``SAMPLE`` (one sample per interval), ``PEAK_DETECT`` (the minimum and
+        maximum of each interval, two values per point), ``HIGH_RESOLUTION``
+        (their average) or ``RMS``.
+
+        Peak detect makes a record at a reduced sample rate keep every glitch
+        the ADC saw; the waveform then transfers with two values per sample.
+        """
+        self.write(f"CHAN{self.number}:WAV{waveform}:TYPE {_DECIMATION_SCPI[mode]}")
+
+    def get_decimation(self, waveform: int = 1) -> str:
+        return self.query(f"CHAN{self.number}:WAV{waveform}:TYPE?").strip()
 
     # -- deskew ------------------------------------------------------------
     def set_skew(self, delay: Quantity) -> None:
