@@ -73,6 +73,11 @@ def is_voltage(q: object) -> bool:
     return _has_dimensionality(q, "V")
 
 
+def is_length(q: object) -> bool:
+    """Return ``True`` if `q` is a length (m, cm, mm, ...)."""
+    return _has_dimensionality(q, "m")
+
+
 def is_dimensionless_decibel(q: object) -> bool:
     """Return ``True`` if `q` is a plain, dimensionless decibel value (``dB``).
 
@@ -125,3 +130,8 @@ def ensure_angle(q: object) -> Quantity:
 def ensure_voltage(q: object) -> Quantity:
     """Return `q` if it is a voltage, else raise :class:`DimensionalityError`."""
     return _ensure(q, is_voltage, "voltage", "V, mV")
+
+
+def ensure_length(q: object) -> Quantity:
+    """Return `q` if it is a length, else raise :class:`DimensionalityError`."""
+    return _ensure(q, is_length, "length", "m, cm, mm")

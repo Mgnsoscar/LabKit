@@ -21,12 +21,14 @@ from .kinds import (
     ensure_power,
     ensure_time,
     ensure_voltage,
+    ensure_length,
     is_angle,
     is_dimensionless_decibel,
     is_frequency,
     is_power,
     is_time,
     is_voltage,
+    is_length,
 )
 from .quantity import Quantity, Unit, is_quantity, quantity, unit
 from .registry import make_registry, ureg
@@ -46,11 +48,13 @@ __all__ = [
     "is_power",
     "is_time",
     "is_voltage",
+    "is_length",
     "is_angle",
     "is_dimensionless_decibel",
     "ensure_frequency",
     "ensure_power",
     "ensure_time",
     "ensure_voltage",
+    "ensure_length",
     "ensure_angle",
 ]
