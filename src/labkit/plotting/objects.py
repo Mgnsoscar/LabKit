@@ -60,6 +60,7 @@ __all__ = [
     "Span",
     "VLine",
     "HLine",
+    "HeatMap",
     "Annotation",
     "Text",
     "Swatch",
@@ -115,7 +116,9 @@ class Panel(PlotObject):
     If no ``Panel`` is given, everything goes into a single default panel.
     A panel may span several cells (``row_span``/``column_span``); with
     ``axes=False`` it is a blank canvas (no axes drawn) for :class:`Text` and
-    :class:`Swatch` objects placed in panel fractions.
+    :class:`Swatch` objects placed in panel fractions. A ``polar`` panel is
+    an azimuth plot: the x values are angles in degrees, 0° at the top and
+    increasing clockwise (the compass convention), the y values the radius.
     """
 
     row: int = 0
@@ -123,6 +126,7 @@ class Panel(PlotObject):
     row_span: int = 1
     column_span: int = 1
     axes: bool = True
+    polar: bool = False
 
 
 @dataclass
@@ -177,6 +181,25 @@ class LinePlot(PlotObject):
     max_x: LimitValue = None
     min_y: LimitValue = None
     max_y: LimitValue = None
+
+
+@dataclass
+class HeatMap(PlotObject):
+    """A value over two axes as coloured cells: `z` is a 2-D array of shape ``(len(y), len(x))``.
+
+    `x` and `y` are the cell centres (sequences, arrays or quantities); `z`
+    is an array or a quantity, and its unit goes on the colour bar next to
+    `label`. Magnitude is drawn in one hue from light to dark, unless a
+    matplotlib `colormap` name is given; `min_z`/`max_z` fix the colour range.
+    """
+
+    x: ArrayLike
+    y: ArrayLike
+    z: ArrayLike
+    label: Optional[str] = None
+    colormap: Optional[str] = None
+    min_z: LimitValue = None
+    max_z: LimitValue = None
 
 
 @dataclass

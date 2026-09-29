@@ -83,6 +83,30 @@ plot(
 )
 ```
 
+## Azimuth patterns and heat maps
+
+A `Panel(polar=True)` is an azimuth plot: the x values of its lines are
+angles in degrees, drawn with 0° at the top and increasing clockwise, and
+the y values are the radius (an antenna pattern in dBi, say). `XTicks`
+label the ring, `YLimits` set the radial range; there is no room for axis
+labels, so say the unit in the panel's `Title`. A
+[`HeatMap`][labkit.plotting.objects.HeatMap] draws a value over two axes
+as coloured cells, `z` of shape `(len(y), len(x))`, in one hue from light
+to dark with a labelled colour bar:
+
+```python
+plot(
+    Panel(0, 0, polar=True),
+    LinePlot(azimuth_deg, gain_dbi, width=2.2),
+    XTicks(range(0, 360, 30), [f"{a}°" for a in range(0, 360, 30)]),
+    YLimits(Q(-20, "dB"), Q(5, "dB")),
+    Title("Pattern at 650 MHz [dBi]", align="left"),
+    Panel(0, 1),
+    HeatMap(azimuth_deg, frequencies, gain_grid, label="gain"),
+    XLabel("Azimuth"), YLabel("Frequency"),
+)
+```
+
 ## Theme
 
 Every figure is drawn in a [`Theme`][labkit.plotting.theme.Theme]: a light

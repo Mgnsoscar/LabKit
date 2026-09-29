@@ -42,6 +42,7 @@ from .objects import (
     FigureTitle,
     GridMajor,
     GridMinor,
+    HeatMap,
     HLine,
     Layout,
     Legend,
@@ -223,6 +224,16 @@ def _figure_objects(objects: list[PlotObject]) -> tuple[Optional[Layout], Option
 
 # --- rendering one panel ----------------------------------------------------
 
+def _sequential_colormap(theme: Theme) -> Any:
+    """One hue, light to dark: the theme's first series colour between the surface and near-black."""
+    from matplotlib.colors import LinearSegmentedColormap, to_rgb
+
+    hue = np.array(to_rgb(theme.series_color(0)))
+    light = 0.12 * hue + 0.88 * np.array(to_rgb(theme.surface))
+    dark = 0.35 * hue
+    return LinearSegmentedColormap.from_list("labkit_sequential", [light, hue, dark])
+
+
 def _render_panel(fig: "Figure", ax: "Axes", objs: list[PlotObject], theme: Theme) -> None:
     # Draw order: later objects sit on top of earlier ones.
     order = {id(o): i for i, o in enumerate(objs)}
@@ -230,26 +241,31 @@ def _render_panel(fig: "Figure", ax: "Axes", objs: list[PlotObject], theme: Them
     def _z(obj: PlotObject) -> int:
         return 2 + order.get(id(obj), 0)
 
+    polar = ax.name == "polar"
     series = [o for o in objs if isinstance(o, (LinePlot, Marker))]
+    heat_maps = [o for o in objs if isinstance(o, HeatMap)]
 
     # Resolve one unit per axis (x is shared; y split left/right).
     x_datas = [_normalize(s.x) for s in series]
     for s, xd in zip(series, x_datas):
         s.x = xd
+    for h in heat_maps:
+        h.x, h.y, h.z = _normalize(h.x), _normalize(h.y), _normalize(h.z)
+        x_datas.append(h.x)
     left = [s for s in series if s.y_axis != "right"]
     right = [s for s in series if s.y_axis == "right"]
     for s in series:
         s.y = _normalize(s.y)
 
     x_unit = _resolve_unit(x_datas, "x")
-    left_unit = _resolve_unit([s.y for s in left], "left y")
+    left_unit = _resolve_unit([s.y for s in left] + [h.y for h in heat_maps], "left y")
     right_unit = _resolve_unit([s.y for s in right], "right y")
 
-    needs_right = bool(right) or any(
+    needs_right = not polar and (bool(right) or any(
         getattr(o, "y_axis", "left") == "right"
         for o in objs
         if isinstance(o, (YLabel, YTicks, YLimits))
-    )
+    ))
     ax2 = ax.twinx() if needs_right else None
 
     def axis_for(y_axis: str) -> tuple["Axes", Any, str]:
@@ -257,6 +273,30 @@ def _render_panel(fig: "Figure", ax: "Axes", objs: list[PlotObject], theme: Them
             assert ax2 is not None
             return ax2, right_unit, "right y"
         return ax, left_unit, "left y"
+
+    def x_axis(values: np.ndarray) -> np.ndarray:
+        """x magnitudes as matplotlib wants them: radians on a polar panel (the values are degrees)."""
+        return np.radians(values) if polar else values
+
+    if polar:
+        cast(Any, ax).set_theta_zero_location("N")
+        cast(Any, ax).set_theta_direction(-1)
+
+    # --- heat maps (under everything else)
+    for h in heat_maps:
+        z_unit = h.z.units if is_quantity(h.z) else None
+        zm = _magnitude(h.z, z_unit, "colour")
+        xm, ym = x_axis(_magnitude(h.x, x_unit, "x")), _magnitude(h.y, left_unit, "left y")
+        if zm.shape != (len(ym), len(xm)):
+            raise PlotError(f"HeatMap z must have shape (len(y), len(x)) = {(len(ym), len(xm))}, got {zm.shape}.")
+        mesh = ax.pcolormesh(
+            xm, ym, zm, shading="nearest", zorder=_z(h), cmap=h.colormap or _sequential_colormap(theme),
+            **_drop_none(vmin=_limit(h.min_z, z_unit, "colour"), vmax=_limit(h.max_z, z_unit, "colour")),
+        )
+        bar = fig.colorbar(mesh, ax=ax, pad=0.015, fraction=0.04)
+        bar.outline.set_edgecolor(theme.axis)
+        if h.label is not None:
+            bar.set_label(h.label + _unit_suffix(z_unit), color=theme.ink_secondary)
 
     # --- data
     for s in series:
@@ -275,9 +315,9 @@ def _render_panel(fig: "Figure", ax: "Axes", objs: list[PlotObject], theme: Them
                 color=s.color, linewidth=s.width, linestyle=s.style,
                 alpha=s.alpha, label=s.label,
             )
-            target.plot(xm, ym, zorder=_z(s), **kwargs)
+            target.plot(x_axis(xm), ym, zorder=_z(s), **kwargs)
         else:  # Marker / MarkerLine
-            xp = _scalar(s.x, x_unit, "x")
+            xp = float(x_axis(np.array([_scalar(s.x, x_unit, "x")]))[0])
             yp = _scalar(s.y, y_unit, y_name)
             kwargs = _drop_none(
                 color=s.color, markersize=s.size, alpha=s.alpha, label=s.label,
@@ -304,7 +344,7 @@ def _render_panel(fig: "Figure", ax: "Axes", objs: list[PlotObject], theme: Them
                 )
         elif isinstance(obj, VLine):
             ax.axvline(
-                _required(obj.x, x_unit, "x", "VLine"), zorder=1,
+                float(x_axis(np.array([_required(obj.x, x_unit, "x", "VLine")]))[0]), zorder=1,
                 **_drop_none(color=obj.color or theme.axis, linestyle=obj.style, linewidth=obj.width,
                              alpha=obj.alpha, label=obj.label),
             )
@@ -330,6 +370,8 @@ def _render_panel(fig: "Figure", ax: "Axes", objs: list[PlotObject], theme: Them
     # --- limits
     for obj in objs:
         if isinstance(obj, XLimits):
+            if polar:
+                continue    # a polar panel always shows the full circle
             ax.set_xlim(_limit(obj.lower, x_unit, "x"), _limit(obj.upper, x_unit, "x"))
         elif isinstance(obj, YLimits):
             target, y_unit, y_name = axis_for(obj.y_axis)
@@ -409,7 +451,7 @@ def _render_panel(fig: "Figure", ax: "Axes", objs: list[PlotObject], theme: Them
     for obj in objs:
         if isinstance(obj, XTicks):
             if obj.positions is not None:
-                ax.set_xticks(_positions(obj.positions, x_unit, "x"))
+                ax.set_xticks(x_axis(_positions(obj.positions, x_unit, "x")))
             if obj.labels is not None:
                 ax.set_xticklabels(list(obj.labels))
             ax.tick_params(axis="x", **_drop_none(
@@ -428,9 +470,13 @@ def _render_panel(fig: "Figure", ax: "Axes", objs: list[PlotObject], theme: Them
     # --- labels & title
     for obj in objs:
         if isinstance(obj, XLabel):
+            if polar:
+                continue    # the angle ring labels itself
             suffix = _unit_suffix(x_unit) if obj.show_unit else ""
             ax.set_xlabel(obj.text + suffix, **_font_kwargs(obj.font, obj.size))
         elif isinstance(obj, YLabel):
+            if polar:
+                continue    # no room for a radial label; say the unit in the title
             target, y_unit, _ = axis_for(obj.y_axis)
             suffix = _unit_suffix(y_unit) if obj.show_unit else ""
             target.set_ylabel(obj.text + suffix, **_font_kwargs(obj.font, obj.size))
@@ -538,7 +584,8 @@ def plot(
 
         for panel, panel_objs in panels:
             ax = fig.add_subplot(
-                gs[panel.row:panel.row + panel.row_span, panel.column:panel.column + panel.column_span]
+                gs[panel.row:panel.row + panel.row_span, panel.column:panel.column + panel.column_span],
+                **({"projection": "polar"} if panel.polar else {}),
             )
             if not panel.axes:
                 ax.axis("off")

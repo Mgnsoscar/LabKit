@@ -232,3 +232,36 @@ def test_custom_theme_series_and_wrap() -> None:
     assert theme.series_color(0) == "#111111" and theme.series_color(3) == "#222222"
     fig = plot(LinePlot([1, 2], [1, 2]), theme=theme)
     assert fig.get_facecolor()[:3] == matplotlib.colors.to_rgb(theme.surface)
+
+
+def test_polar_panel_takes_degrees_clockwise_from_the_top() -> None:
+    from labkit.plotting import XTicks, YLimits
+
+    az = Q(np.arange(0, 361, 30), "deg")
+    r = Q(np.cos(np.radians(az.magnitude)), "dB")
+    fig = plot(
+        Panel(0, 0, polar=True), LinePlot(az, r), XTicks([0, 90, 180, 270], ["N", "E", "S", "W"]),
+        YLimits(Q(-1, "dB"), Q(1, "dB")), XLabel("ignored"), YLabel("ignored"),
+    )
+    ax = fig.axes[0]
+    assert ax.name == "polar"
+    assert ax.get_theta_direction() == -1 and ax.get_theta_offset() == pytest.approx(np.pi / 2)
+    line_x = ax.lines[0].get_xdata()
+    assert line_x[-1] == pytest.approx(2 * np.pi)                      # degrees became radians
+    assert [t.get_text() for t in ax.get_xticklabels()] == ["N", "E", "S", "W"]
+    assert ax.get_ylim() == (-1.0, 1.0)
+
+
+def test_heat_map_draws_cells_with_a_labelled_colour_bar() -> None:
+    from labkit.plotting import HeatMap
+
+    x = Q([0, 10, 20], "deg")
+    y = Q([1, 2], "GHz")
+    z = Q(np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]), "dB")
+    fig = plot(HeatMap(x, y, z, label="gain"), XLabel("Azimuth"), YLabel("Frequency"))
+    ax, bar = fig.axes
+    assert ax.get_xlabel() == "Azimuth [deg]" and ax.get_ylabel() == "Frequency [GHz]"
+    assert bar.get_ylabel() == "gain [dB]"
+    assert ax.collections[0].get_array().max() == 6.0
+    with pytest.raises(PlotError, match="shape"):
+        plot(HeatMap(x, y, z.T))
