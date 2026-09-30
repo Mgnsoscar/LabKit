@@ -376,11 +376,20 @@ port's `CONTROL` to that port and its `PROT.` to `SPID ROT2`; a serial port's
 bits, 1 stop bit, no parity, which the driver sets on the VISA resource).
 Angles are degree quantities. The controller reports its resolution (pulses
 per degree, 10 on the MD-01) in every reply and the driver uses that for the
-next set command, so no configuration is needed for it. The controller's own
-`MIN ANGLE`/`MAX ANGLE` limits are its to enforce: a target outside them is
-ignored, which `move_to` reports as a `TimeoutError` after stopping the
-motors. The failsafe `_shutdown_procedure` **stops the motors** when the
-session ends.
+next set command, so no configuration is needed for it.
+
+A *set* command positions to within the controller's own dead band, a few
+tenths of a degree on an MD-01, so `move_to` accepts a tolerance of at
+least one resolution step (0.1°) and 0.5° is a sensible default. When the
+rotator comes to rest short of the target by more than the tolerance,
+`move_to` creeps the rest of the way with short jog pulses, the way the
+controller's buttons do (`nudge()`, on by default; each pulse that
+overshoots halves the next). The controller's own `MIN ANGLE`/`MAX ANGLE`
+limits are its to enforce: a target outside them is ignored, which
+`move_to` reports as a `RotorError` saying the rotator never moved; a
+rotator still moving when the timeout runs out is stopped and reported as
+a `TimeoutError`. The failsafe `_shutdown_procedure` **stops the motors**
+when the session ends.
 
 !!! tip "First connection: if it times out"
     A timeout means the controller did not answer. Check, in this order:

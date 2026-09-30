@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+from time import perf_counter
 from typing import cast
 
 import pytest
 
 from labkit.instruments import MD01, mock_instrument
-from labkit.instruments.drivers.spid.md01 import CMD_MOVE, CMD_SET, CMD_STATUS, CMD_STOP, decode_reply, encode_set
+from labkit.instruments.drivers.spid.md01 import (
+    CMD_MOVE,
+    CMD_SET,
+    CMD_STATUS,
+    CMD_STOP,
+    RotorError,
+    decode_reply,
+    encode_set,
+)
 from labkit.units import quantity as Q
 
 
@@ -18,6 +27,11 @@ class Controller:
         self.azimuth, self.elevation, self.step, self.resolution = azimuth, elevation, step, resolution
         self.target = (azimuth, elevation)
         self.packets: list[bytes] = []
+        #: A jog in progress (direction bits, and when it started): the rotator turns `jog_rate` degrees per
+        #: second until the stop lands, at least one resolution step.
+        self.jogging = 0
+        self.jog_started = 0.0
+        self.jog_rate = 2.0
 
     def _frame(self) -> bytes:
         def digits(angle: float) -> bytes:
@@ -36,6 +50,13 @@ class Controller:
             self.target = (az, el)
             return self._frame()                       # the MD-01 replies with where it is now
         if command == CMD_STOP:
+            if self.jogging:                            # the pulse turned the rotator this far
+                advance = max(0.1, round(self.jog_rate * (perf_counter() - self.jog_started), 1))
+                sign = 1 if self.jogging & 0x02 else -1 if self.jogging & 0x01 else 0
+                self.azimuth = round(self.azimuth + sign * advance, 1)
+                up = 1 if self.jogging & 0x04 else -1 if self.jogging & 0x08 else 0
+                self.elevation = round(self.elevation + up * advance, 1)
+                self.jogging = 0
             self.target = (self.azimuth, self.elevation)
             return self._frame()
         if command == CMD_STATUS:
@@ -45,6 +66,7 @@ class Controller:
                 setattr(self, name, round(here + delta, 1))
             return self._frame()
         if command == CMD_MOVE:
+            self.jogging, self.jog_started = packet[1], perf_counter()
             return b""                                 # no reply to a jog
         raise AssertionError(f"unknown command {command:#x}")
 
@@ -109,9 +131,43 @@ def test_move_to_waits_for_arrival_and_rest() -> None:
         return original(packet)
 
     r._backend._raw_responses = ignore_set  # type: ignore[attr-defined]
-    with pytest.raises(TimeoutError, match="MIN/MAX ANGLE"):
-        r.move_to(Q(400, "deg"), timeout=Q(0.05, "s"), poll=Q(0.01, "s"), settle=Q(0, "s"))
-    assert c.packets[-1][11] == CMD_STOP
+    with pytest.raises(RotorError, match="MIN/MAX ANGLE"):
+        r.move_to(Q(400, "deg"), timeout=Q(5, "s"), poll=Q(0, "s"), settle=Q(0, "s"))
+    # a controller that stops short of the target (its dead band) with a tolerance it cannot meet
+    r._backend._raw_responses = original  # type: ignore[attr-defined]
+    c.step = 10.0
+    stops_short = Controller(azimuth=45.0, step=10.0)
+    stops_short.__class__ = type("Short", (Controller,), {})
+    short = rotor(stops_short)
+
+    def short_of_target(packet: bytes) -> bytes:
+        if packet[11] == CMD_SET:
+            stops_short.packets.append(packet)
+            az = int(packet[1:5].decode()) / packet[5] - 360
+            stops_short.target = (az - 0.3, stops_short.target[1])   # lands 0.3° early
+            return stops_short._frame()
+        return Controller.__call__(stops_short, packet)
+
+    short._backend._raw_responses = short_of_target  # type: ignore[attr-defined]
+    with pytest.raises(RotorError, match="stopped at 54.7° azimuth, 0.3° from the target 55°"):
+        short.move_to(Q(55, "deg"), tolerance=Q(0, "deg"), poll=Q(0, "s"), settle=Q(0, "s"), nudge=False)
+    assert short.move_to(Q(65, "deg"), tolerance=Q(0.5, "deg"), poll=Q(0, "s"), settle=Q(0, "s")).azimuth.magnitude == pytest.approx(64.7)
+    # with nudging (the default) the driver creeps the rest of the way with jog pulses, like the buttons
+    p = short.move_to(Q(75, "deg"), tolerance=Q(0, "deg"), poll=Q(0, "s"), settle=Q(0, "s"))
+    assert p.azimuth.magnitude == pytest.approx(75.0, abs=0.1)
+    jogs = [pk for pk in stops_short.packets if pk[11] == CMD_MOVE]
+    assert jogs and all(pk[1] == 0x02 for pk in jogs)                # nudged clockwise over the last 0.3°
+    assert stops_short.packets[-1][11] in (CMD_STATUS, CMD_STOP)
+    # and a big overshoot on the first pulse is corrected with shorter ones the other way
+    stops_short.jog_rate = 20.0
+    p = short.move_to(Q(85, "deg"), tolerance=Q(0, "deg"), poll=Q(0, "s"), settle=Q(0, "s"))
+    assert p.azimuth.magnitude == pytest.approx(85.0, abs=0.11)      # within one resolution step
+    assert any(pk[1] == 0x01 for pk in stops_short.packets if pk[11] == CMD_MOVE)
+    # a rotator still moving when the time runs out: stopped and reported
+    slow = rotor(Controller(azimuth=0.0, step=0.1))
+    with pytest.raises(TimeoutError, match="still moving"):
+        slow.move_to(Q(300, "deg"), timeout=Q(0.05, "s"), poll=Q(0.01, "s"), settle=Q(0, "s"))
+    assert slow._backend.raw_writes[-1][11] == CMD_STOP  # type: ignore[attr-defined]
 
 
 def test_shutdown_stops_the_motors_and_dummy_mode_is_silent() -> None:

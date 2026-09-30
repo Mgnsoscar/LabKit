@@ -57,7 +57,7 @@ from ...base import Backend, BaseInstrument, DummyBackend
 if TYPE_CHECKING:
     from ...environment import TestEnvironment
 
-__all__ = ["MD01", "RotorPosition", "Direction", "find_baud_rate", "BAUD_RATES"]
+__all__ = ["MD01", "RotorPosition", "RotorError", "Direction", "find_baud_rate", "BAUD_RATES"]
 
 Direction = Literal["left", "right", "up", "down"]
 
@@ -71,6 +71,12 @@ _DIRECTION_BITS: dict[str, int] = {"left": 0x01, "right": 0x02, "up": 0x04, "dow
 #: The resolution assumed until the controller has reported its own (the MD-01 reports 10).
 DEFAULT_RESOLUTION = 10
 _REPLY_LENGTH = 12
+#: Slack on angle comparisons: a decoded position such as 85.1 is not exactly representable.
+_EPS = 1e-6
+
+
+class RotorError(RuntimeError):
+    """The rotator came to rest away from the target: it never moved, or it stopped short."""
 
 
 @dataclass(frozen=True)
@@ -280,6 +286,73 @@ class MD01(BaseInstrument):
             raise ValueError(f"direction must be one of {sorted(_DIRECTION_BITS)}, not {direction!r}")
         self._exchange(encode_simple(CMD_MOVE, _DIRECTION_BITS[direction]), reply=False)
 
+    def _settled(self, poll: float, patience: float = 5.0) -> RotorPosition:
+        """The position once two consecutive polls agree (the rotator at rest), or the latest after `patience`."""
+        deadline = perf_counter() + patience
+        last = self.get_position()
+        while perf_counter() < deadline:
+            sleep(poll)
+            position = self.get_position()
+            if _degrees(position.azimuth) == _degrees(last.azimuth) and _degrees(position.elevation) == _degrees(last.elevation):
+                return position
+            last = position
+        return last
+
+    def nudge(
+        self,
+        azimuth: Any,
+        elevation: Any = None,
+        tolerance: Quantity = quantity(0.1, "deg"),
+        pulse: Quantity = quantity(0.15, "s"),
+        attempts: int = 12,
+        poll: Quantity = quantity(0.2, "s"),
+    ) -> RotorPosition:
+        """Creep to `azimuth` (and `elevation`) with short jogs, as the controller's buttons do.
+
+        Each attempt jogs towards the target for `pulse`, stops, waits for
+        the rotator to rest and reads the position; a pulse that overshoots
+        halves the next one, a pulse that hardly moved lengthens it. Returns
+        when within `tolerance` (at least one resolution step); raises
+        :class:`RotorError` after `attempts` pulses without getting there.
+        The motors are always stopped after a pulse, whatever happens.
+        """
+        target_az = _degrees(azimuth)
+        target_el = _degrees(elevation) if elevation is not None else None
+        tol = max(_degrees(tolerance), 1.0 / max(self._az_resolution, 1))
+        pulse_s = float(ensure_time(pulse).to("s").magnitude)
+        wait = float(ensure_time(poll).to("s").magnitude)
+        position = self._settled(wait)
+        for _ in range(attempts):
+            az, el = _degrees(position.azimuth), _degrees(position.elevation)
+            error_az = target_az - az
+            error_el = 0.0 if target_el is None else target_el - el
+            if abs(error_az) <= tol + _EPS and abs(error_el) <= tol + _EPS:
+                return position
+            if abs(error_az) > tol + _EPS:
+                direction: Direction = "right" if error_az > 0 else "left"
+                error = error_az
+            else:
+                direction = "up" if error_el > 0 else "down"
+                error = error_el
+            try:
+                self.move(direction)
+                sleep(pulse_s)
+            finally:
+                self.stop()
+            position = self._settled(wait)
+            after = _degrees(position.azimuth) if direction in ("left", "right") else _degrees(position.elevation)
+            before = az if direction in ("left", "right") else el
+            moved = abs(after - before)
+            if moved > abs(error) + tol:          # overshot: shorter pulses
+                pulse_s = max(pulse_s / 2, 0.02)
+            elif moved < tol / 2:                 # barely moved: longer pulses
+                pulse_s = min(pulse_s * 1.5, 2.0)
+        az = _degrees(position.azimuth)
+        raise RotorError(
+            f"'{self._name}' is at {az:g}° azimuth after {attempts} nudges towards {target_az:g}° "
+            f"(tolerance {tol:g}°); the last pulse was {pulse_s:.2f} s."
+        )
+
     def move_to(
         self,
         azimuth: Any,
@@ -288,38 +361,70 @@ class MD01(BaseInstrument):
         timeout: Quantity = quantity(180, "s"),
         settle: Quantity = quantity(0.5, "s"),
         poll: Quantity = quantity(0.5, "s"),
+        nudge: bool = True,
     ) -> RotorPosition:
         """Move to `azimuth` (and `elevation`) and wait until the rotator has arrived and come to rest.
 
         Arrival is the reported position within `tolerance` of the target on
-        two polls `settle` apart with no movement between them. Raises
-        :class:`TimeoutError`, after stopping the motors, if that does not
-        happen within `timeout` (a target outside the controller's limits is
-        never reached).
+        two polls `settle` apart with no movement between them. The
+        controller positions a *set* command to within its own dead band (a
+        few tenths of a degree on an MD-01); if it comes to rest short of the
+        target by more than `tolerance` and `nudge` is on, the rotator is
+        crept the rest of the way with short jogs (:meth:`nudge`), the way
+        the controller's buttons would. `tolerance` is at least one
+        resolution step (0.1° on an MD-01).
+
+        Raises :class:`RotorError` when the rotator never moved (a target
+        outside the controller's ``MIN ANGLE``/``MAX ANGLE`` is ignored), or
+        stopped short and nudging is off or did not get there. Raises
+        :class:`TimeoutError`, after stopping the motors, if it is still
+        moving when `timeout` runs out.
         """
         target_az = _degrees(azimuth)
         target_el = _degrees(elevation) if elevation is not None else None
-        tol = _degrees(tolerance)
-        deadline = perf_counter() + float(ensure_time(timeout).to("s").magnitude)
-        self.set_position(target_az, target_el)
+        tol = max(_degrees(tolerance), 1.0 / max(self._az_resolution, 1))
+        started = perf_counter()
+        deadline = started + float(ensure_time(timeout).to("s").magnitude)
+        at_start = self.set_position(target_az, target_el)
         wait, rest = float(ensure_time(poll).to("s").magnitude), float(ensure_time(settle).to("s").magnitude)
+        # the rotator is finished when it has not moved for this long (a start ramp can delay the first motion)
+        finished_after = max(3 * wait, 2 * rest, 1.0 if wait > 0 else 0.0)
         last: Optional[RotorPosition] = None
+        rest_since: Optional[float] = None
         while True:
             sleep(wait)
             position = self.get_position()
-            arrived = abs(_degrees(position.azimuth) - target_az) <= tol and (
-                target_el is None or abs(_degrees(position.elevation) - target_el) <= tol)
-            if arrived and last is not None and _degrees(position.azimuth) == _degrees(last.azimuth) \
-                    and _degrees(position.elevation) == _degrees(last.elevation):
+            az, el = _degrees(position.azimuth), _degrees(position.elevation)
+            arrived = abs(az - target_az) <= tol + _EPS and (target_el is None or abs(el - target_el) <= tol + _EPS)
+            still = last is not None and az == _degrees(last.azimuth) and el == _degrees(last.elevation)
+            if arrived and still:
                 return position
-            last = position if arrived else None
+            now = perf_counter()
+            rest_since = (rest_since if still and rest_since is not None else now)
+            last = position
             if arrived:
                 sleep(rest)
-            if perf_counter() > deadline:
+                continue
+            if still and now - rest_since >= finished_after and (wait == 0.0 or now - started >= finished_after):
+                moved = at_start is None or az != _degrees(at_start.azimuth) or el != _degrees(at_start.elevation)
+                if not moved:
+                    raise RotorError(
+                        f"'{self._name}' did not move towards {target_az:g}° azimuth; it stays at {az:g}° "
+                        f"(a target outside the controller's MIN/MAX ANGLE is ignored)."
+                    )
+                if nudge:
+                    return self.nudge(target_az, target_el, tolerance=quantity(tol, "deg"),
+                                      poll=quantity(max(wait, 0.0), "s"))
+                raise RotorError(
+                    f"'{self._name}' stopped at {az:g}° azimuth, {abs(az - target_az):.1f}° from the target "
+                    f"{target_az:g}°, outside the tolerance of {tol:g}°; the controller positions to within its own "
+                    f"dead band, so use a tolerance of 0.5° or more."
+                )
+            if now > deadline:
                 self.stop()
                 raise TimeoutError(
-                    f"'{self._name}' did not reach {target_az:g}° azimuth within {timeout:~}; it reports "
-                    f"{_degrees(position.azimuth):g}° (is the target inside the controller's MIN/MAX ANGLE?)."
+                    f"'{self._name}' was still moving towards {target_az:g}° azimuth when {timeout:~} ran out; "
+                    f"it reports {az:g}°."
                 )
 
     # -- failsafe ------------------------------------------------------------
