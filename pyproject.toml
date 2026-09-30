@@ -33,8 +33,9 @@ dependencies = [
 [project.optional-dependencies]
 # Declarative plotting layer (labkit.plotting).
 plotting = ["matplotlib>=3.8"]
-# Instrument / SCPI control layer (labkit.instruments).
-instruments = ["pyvisa>=1.14"]
+# Instrument / SCPI control layer (labkit.instruments). pyserial serves the serial-port
+# instruments (the SPID MD-01 rotator) under PyVISA-py and the driver's baud-rate probe.
+instruments = ["pyvisa>=1.14", "pyserial>=3.5"]
 # Everything a user of the full framework needs.
 all = ["labkit[plotting,instruments]"]
 # Development tooling.
