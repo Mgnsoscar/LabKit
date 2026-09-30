@@ -34,7 +34,9 @@ LabKit gives you three things that work together:
 > **`TGR6000` 6 GHz RF signal generator**, and the
 > Keysight/Agilent **`N5183A` MXG 20 GHz analog signal generator** (with
 > AM/FM/ΦM/pulse modulation and step/list sweeps), each built from reusable
-> per-topic menus over a shared base. Public APIs may still change before 1.0.
+> per-topic menus over a shared base, and the SPID **`MD01` antenna rotator
+> controller** (Rot2Prog protocol over USB, RS232 or Ethernet). Public APIs
+> may still change before 1.0.
 
 ## Install
 

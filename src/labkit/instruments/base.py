@@ -62,6 +62,17 @@ class DummyBackend:
         self.log.append(f"WRITE: {command}")
         print(f"DUMMY WRITE: {command}")
 
+    # -- binary protocols (a PyVISA resource has the same two methods) --------
+    def write_raw(self, data: bytes) -> Any:
+        """Send raw bytes (for instruments with a binary protocol rather than SCPI)."""
+        self.log.append(f"WRITE RAW: {data.hex(' ')}")
+        print(f"DUMMY WRITE RAW: {data.hex(' ')}")
+
+    def read_bytes(self, count: int) -> bytes:
+        """Read `count` raw bytes; the dummy has nothing to say and returns none."""
+        self.log.append(f"READ {count} BYTES")
+        return b""
+
     def close(self) -> None:
         self.log.append("CLOSE")
 

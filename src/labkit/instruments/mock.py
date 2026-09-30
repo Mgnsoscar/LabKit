@@ -17,10 +17,11 @@ from typing import Any, Callable, Optional, Union
 from .base import BaseInstrument, DummyBackend
 from .environment import TestEnvironment
 
-__all__ = ["MockBackend", "MockEnvironment", "mock_instrument"]
+__all__ = ["MockBackend", "MockEnvironment", "mock_instrument", "RawResponder"]
 
 Responder = Callable[[str], str]
 ResponseTable = Union[dict[str, str], Responder]
+RawResponder = Callable[[bytes], bytes]
 
 
 class MockBackend(DummyBackend):
@@ -32,13 +33,33 @@ class MockBackend(DummyBackend):
         Either a ``{query: response}`` mapping (matched exactly) or a callable
         ``query -> response``. Unmatched queries return ``""``. Register more at
         runtime with :meth:`on`.
+    raw_responses:
+        For binary-protocol drivers: a callable ``packet -> reply`` answering
+        each :meth:`write_raw`; the reply is handed out by the following
+        :meth:`read_bytes` calls. Every packet written is kept in
+        :attr:`raw_writes`.
     """
 
-    def __init__(self, responses: Optional[ResponseTable] = None) -> None:
+    def __init__(self, responses: Optional[ResponseTable] = None,
+                 raw_responses: Optional[RawResponder] = None) -> None:
         super().__init__()
         self.writes: list[str] = []
         self.queries: list[str] = []
+        self.raw_writes: list[bytes] = []
         self._responses: ResponseTable = {} if responses is None else responses
+        self._raw_responses = raw_responses
+        self._pending = b""
+
+    def write_raw(self, data: bytes) -> Any:
+        self.raw_writes.append(bytes(data))
+        self.log.append(f"WRITE RAW: {bytes(data).hex(' ')}")
+        if self._raw_responses is not None:
+            self._pending += self._raw_responses(bytes(data))
+
+    def read_bytes(self, count: int) -> bytes:
+        self.log.append(f"READ {count} BYTES")
+        out, self._pending = self._pending[:count], self._pending[count:]
+        return out
 
     def on(self, query: str, response: str) -> "MockBackend":
         """Register (or replace) the response for an exact `query`. Chainable."""
@@ -77,6 +98,7 @@ def mock_instrument(
     driver_cls: type[BaseInstrument],
     *,
     responses: Optional[ResponseTable] = None,
+    raw_responses: Optional[RawResponder] = None,
     name: str = "mock",
     address: str = "0.0.0.0",
     **kwargs: Any,
@@ -84,8 +106,9 @@ def mock_instrument(
     """Build `driver_cls` wired to a fresh :class:`MockBackend`.
 
     Returns ``(instrument, backend)``. Extra keyword arguments are forwarded to
-    the driver constructor.
+    the driver constructor. `raw_responses` scripts a binary-protocol driver
+    (see :class:`MockBackend`).
     """
-    backend = MockBackend(responses)
+    backend = MockBackend(responses, raw_responses)
     instrument = driver_cls(MockEnvironment(), name, address, backend=backend, **kwargs)
     return instrument, backend

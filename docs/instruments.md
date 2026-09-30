@@ -347,6 +347,52 @@ rebuilt from the header, which keeps the transport a plain text query.
 The failsafe `_shutdown_procedure` switches the display update on and
 returns the scope to continuous acquisition.
 
+## Antenna rotators
+
+The rotator driver is the SPID Elektronik
+[`MD01`][labkit.instruments.drivers.spid.md01.MD01] controller (it also
+covers the MD-02 and MD-03, which speak the same protocol). It is not a SCPI
+instrument: it takes 13-byte binary commands on the Rot2Prog protocol, over the
+controller's USB virtual COM port, an RS232 port, or its Ethernet port, and
+answers with 12-byte position frames. The driver hides all of that:
+
+```python
+from labkit.units import quantity
+from labkit.instruments import MD01
+
+rotor = ...  # an MD01 from your TestEnvironment, e.g. MD01(self, "Rotor", "COM5", baud_rate=115200)
+
+rotor.get_position()                     # RotorPosition(azimuth=…°, elevation=…°, …)
+rotor.set_position(quantity(90, "deg"))  # start moving; the MD-01 replies with where it is
+rotor.move_to(quantity(90, "deg"))       # move and wait: within 0.5° and at rest, or TimeoutError
+rotor.move("right")                      # jog until ...
+rotor.stop()                             # ... stopped
+```
+
+The address is a serial port (`"COM5"`, `"/dev/ttyUSB0"`) or the controller's
+IP address (port 23 unless given as `"host:port"`). On the controller, set the
+port's `CONTROL` to that port and its `PROT.` to `SPID ROT2`; a serial port's
+`BAUD` must match the driver's `baud_rate` (the USB port is fixed at 8 data
+bits, 1 stop bit, no parity, which the driver sets on the VISA resource).
+Angles are degree quantities. The controller reports its resolution (pulses
+per degree, 10 on the MD-01) in every reply and the driver uses that for the
+next set command, so no configuration is needed for it. The controller's own
+`MIN ANGLE`/`MAX ANGLE` limits are its to enforce: a target outside them is
+ignored, which `move_to` reports as a `TimeoutError` after stopping the
+motors. The failsafe `_shutdown_procedure` **stops the motors** when the
+session ends.
+
+!!! note "Where the protocol comes from"
+    SPID does not publish the Rot2Prog byte layout; the driver follows the
+    community reference (ryeng.name/blog/3) and the Hamlib and SPID-MD-01
+    Python controller implementations, which agree with each other, and the
+    two MD-01 particulars they record: the MD-01 *does* answer a set command
+    (with its current position, unlike the original Rot2Prog boxes) and adds
+    the jog command (`0x14` with direction bits). `get_id()` returns a fixed
+    description, since the protocol has no identification query, and the SCPI
+    helpers of the base class (`reset_instrument`, `check_errors`) do not
+    apply to it.
+
 ## Testing drivers without hardware
 
 [`mock_instrument`][labkit.instruments.mock.mock_instrument] wires a real driver

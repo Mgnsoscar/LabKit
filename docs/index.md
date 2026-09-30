@@ -18,7 +18,8 @@ LabKit is organised into small, independently useful pieces:
     plot renderer, the CSV writer, the instrument base layer (with dummy mode
     and a scriptable mock) and the first drivers — R&S FSV3007/FPL1003
     spectrum analyzers, R&S ZNLE18 VNA, Aim-TTi TGR6000 and Keysight N5183A
-    signal generators — are in place. Public APIs may still change before 1.0.
+    signal generators, SPID MD-01 antenna rotator — are in place. Public APIs
+    may still change before 1.0.
     See [Design & rationale](design/architecture.md) for the roadmap.
 
 ## Install

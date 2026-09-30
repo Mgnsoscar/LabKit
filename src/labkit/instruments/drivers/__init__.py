@@ -19,6 +19,8 @@ Available:
   RF signal generator (6 GHz).
 - :class:`~labkit.instruments.drivers.keysight.N5183A` — Keysight/Agilent
   N5183A MXG microwave analog signal generator (20 GHz).
+- :class:`~labkit.instruments.drivers.spid.MD01` — SPID Elektronik MD-01
+  antenna rotator controller (Rot2Prog protocol over serial or Ethernet).
 """
 
 from __future__ import annotations
@@ -26,5 +28,6 @@ from __future__ import annotations
 from .aim_tti import TGR6000
 from .keysight import N5183A
 from .rohde_schwarz import FPL1003, FSV3007, RTO64, ZNLE18
+from .spid import MD01
 
-__all__ = ["FSV3007", "FPL1003", "ZNLE18", "RTO64", "TGR6000", "N5183A"]
+__all__ = ["FSV3007", "FPL1003", "ZNLE18", "RTO64", "TGR6000", "N5183A", "MD01"]

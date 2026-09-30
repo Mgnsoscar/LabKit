@@ -12,7 +12,7 @@ Concrete drivers live under :mod:`labkit.instruments.drivers` and are re-exporte
 here: the R&S :class:`FSV3007` and :class:`FPL1003` spectrum analyzers, the R&S
 :class:`ZNLE18` vector network analyzer, the R&S :class:`RTO64` oscilloscope,
 the Aim-TTi :class:`TGR6000` and the Keysight/Agilent :class:`N5183A` signal
-generators.
+generators, and the SPID :class:`MD01` antenna rotator controller.
 
 Importing this package does not import `pyvisa`; only creating a non-dummy
 :class:`TestEnvironment` does. Install the extra with
@@ -22,7 +22,7 @@ Importing this package does not import `pyvisa`; only creating a non-dummy
 from __future__ import annotations
 
 from .base import BaseInstrument, Backend, DummyBackend, Menu
-from .drivers import FPL1003, FSV3007, N5183A, RTO64, TGR6000, ZNLE18
+from .drivers import FPL1003, FSV3007, MD01, N5183A, RTO64, TGR6000, ZNLE18
 from .environment import TestEnvironment
 from .mock import MockBackend, MockEnvironment, mock_instrument
 
@@ -38,6 +38,7 @@ __all__ = [
     "RTO64",
     "TGR6000",
     "N5183A",
+    "MD01",
     "MockBackend",
     "MockEnvironment",
     "mock_instrument",

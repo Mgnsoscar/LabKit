@@ -7,7 +7,7 @@ installed. The Agg backend is forced so nothing tries to open a window.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator
 
 import numpy as np
 import pytest
@@ -243,10 +243,10 @@ def test_polar_panel_takes_degrees_clockwise_from_the_top() -> None:
         Panel(0, 0, polar=True), LinePlot(az, r), XTicks([0, 90, 180, 270], ["N", "E", "S", "W"]),
         YLimits(Q(-1, "dB"), Q(1, "dB")), XLabel("ignored"), YLabel("ignored"),
     )
-    ax = fig.axes[0]
+    ax: Any = fig.axes[0]
     assert ax.name == "polar"
     assert ax.get_theta_direction() == -1 and ax.get_theta_offset() == pytest.approx(np.pi / 2)
-    line_x = ax.lines[0].get_xdata()
+    line_x = np.asarray(ax.lines[0].get_xdata())
     assert line_x[-1] == pytest.approx(2 * np.pi)                      # degrees became radians
     assert [t.get_text() for t in ax.get_xticklabels()] == ["N", "E", "S", "W"]
     assert ax.get_ylim() == (-1.0, 1.0)
@@ -262,6 +262,7 @@ def test_heat_map_draws_cells_with_a_labelled_colour_bar() -> None:
     ax, bar = fig.axes
     assert ax.get_xlabel() == "Azimuth [deg]" and ax.get_ylabel() == "Frequency [GHz]"
     assert bar.get_ylabel() == "gain [dB]"
-    assert ax.collections[0].get_array().max() == 6.0
+    cells = ax.collections[0].get_array()
+    assert cells is not None and cells.max() == 6.0
     with pytest.raises(PlotError, match="shape"):
         plot(HeatMap(x, y, z.T))
