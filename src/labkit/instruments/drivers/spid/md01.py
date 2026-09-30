@@ -57,7 +57,7 @@ from ...base import Backend, BaseInstrument, DummyBackend
 if TYPE_CHECKING:
     from ...environment import TestEnvironment
 
-__all__ = ["MD01", "RotorPosition", "Direction"]
+__all__ = ["MD01", "RotorPosition", "Direction", "find_baud_rate", "BAUD_RATES"]
 
 Direction = Literal["left", "right", "up", "down"]
 
@@ -127,6 +127,42 @@ def decode_reply(frame: bytes) -> RotorPosition:
                          az_res, el_res)
 
 
+#: The baud rates the controller's menu offers, most likely first.
+BAUD_RATES = (115200, 9600, 19200, 38400, 57600, 230400, 460800, 4800, 2400, 1200, 600)
+
+
+def find_baud_rate(port: str, candidates: tuple[int, ...] = BAUD_RATES, timeout: float = 1.0) -> Optional[tuple[int, RotorPosition]]:
+    """Try each baud rate on `port` with a status command and return the first that gets a valid reply.
+
+    A troubleshooting helper for the first connection, independent of VISA:
+    it opens the port with `pyserial` (``pip install pyserial``), which is
+    also what PyVISA-py uses for serial resources. ``None`` means no rate
+    produced a reply; the controller is then not listening on that port
+    (its ``CONTROL`` and ``PROT.`` settings) or the port is not the
+    controller's. Prints one line per attempt.
+    """
+    import serial  # type: ignore[import-untyped]  # pyserial
+
+    packet = encode_simple(CMD_STATUS)
+    for rate in candidates:
+        with serial.Serial(port, rate, bytesize=8, parity="N", stopbits=1, timeout=timeout, dsrdtr=False,
+                           rtscts=False) as link:
+            link.dtr = True
+            link.rts = True
+            link.reset_input_buffer()
+            link.write(packet)
+            reply = link.read(_REPLY_LENGTH)
+        try:
+            position = decode_reply(reply)
+        except ValueError:
+            print(f"{rate:>7} baud: {'no reply' if not reply else 'garbage ' + reply.hex(' ')}")
+            continue
+        print(f"{rate:>7} baud: reply, azimuth {float(position.azimuth.magnitude):.1f}°, "
+              f"elevation {float(position.elevation.magnitude):.1f}°, resolution {position.az_resolution}")
+        return rate, position
+    return None
+
+
 class MD01(BaseInstrument):
     """The SPID MD-01 rotator controller (also MD-02/MD-03) on the Rot2Prog protocol.
 
@@ -186,6 +222,10 @@ class MD01(BaseInstrument):
             resource.data_bits = 8
             resource.parity = constants.Parity.none
             resource.stop_bits = constants.StopBits.one
+            resource.flow_control = constants.ControlFlow.none
+            # a USB virtual COM port may hold its transmitter until the host asserts the handshake lines
+            resource.set_visa_attribute(constants.ResourceAttribute.asrl_dtr_state, constants.LineState.asserted)
+            resource.set_visa_attribute(constants.ResourceAttribute.asrl_rts_state, constants.LineState.asserted)
         except Exception:
             pass
 

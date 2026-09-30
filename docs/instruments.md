@@ -382,6 +382,25 @@ ignored, which `move_to` reports as a `TimeoutError` after stopping the
 motors. The failsafe `_shutdown_procedure` **stops the motors** when the
 session ends.
 
+!!! tip "First connection: if it times out"
+    A timeout means the controller did not answer. Check, in this order:
+
+    1. On the controller: `CONTROL A1` (or `A2`) is set to the port you use
+       (`USB`, `COM0`, `COM1` or `ETH`) and `PROT.` to `SPID ROT2`. Without
+       these it ignores every command.
+    2. The baud rate. Run
+       `find_baud_rate("COM7")` from `labkit.instruments.drivers.spid`
+       (needs `pyserial`): it sends a status command at every rate the
+       controller's menu offers and prints which one replies. Pass that rate
+       to the driver as `baud_rate=`.
+    3. That no other program holds the port (the SPID software, a terminal).
+    4. With PyVISA-py as the VISA backend, serial resources need `pyserial`
+       installed; with NI-VISA, the port must show under `ASRL7::INSTR` in
+       NI MAX.
+
+    The driver asserts DTR and RTS on the port, since a USB virtual COM port
+    may not transmit until the host does.
+
 !!! note "Where the protocol comes from"
     SPID does not publish the Rot2Prog byte layout; the driver follows the
     community reference (ryeng.name/blog/3) and the Hamlib and SPID-MD-01
