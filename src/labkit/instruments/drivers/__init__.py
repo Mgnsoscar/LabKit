@@ -15,6 +15,9 @@ Available:
   vector network analyzer (18 GHz).
 - :class:`~labkit.instruments.drivers.rohde_schwarz.RTO64` — R&S RTO64
   oscilloscope (4 channels, 600 MHz – 6 GHz by option).
+- :class:`~labkit.instruments.drivers.siglent.SHA851A` /
+  :class:`~labkit.instruments.drivers.siglent.SHA852A` — Siglent SHA850A
+  handheld spectrum analyzers (3.6 GHz / 7.5 GHz).
 - :class:`~labkit.instruments.drivers.aim_tti.TGR6000` — Aim-TTi TGR6000
   RF signal generator (6 GHz).
 - :class:`~labkit.instruments.drivers.keysight.N5183A` — Keysight/Agilent
@@ -28,6 +31,7 @@ from __future__ import annotations
 from .aim_tti import TGR6000
 from .keysight import N5183A
 from .rohde_schwarz import FPL1003, FSV3007, RTO64, ZNLE18
+from .siglent import SHA851A, SHA852A
 from .spid import MD01
 
-__all__ = ["FSV3007", "FPL1003", "ZNLE18", "RTO64", "TGR6000", "N5183A", "MD01"]
+__all__ = ["FSV3007", "FPL1003", "ZNLE18", "RTO64", "SHA851A", "SHA852A", "TGR6000", "N5183A", "MD01"]

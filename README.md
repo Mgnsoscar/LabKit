@@ -28,7 +28,9 @@ LabKit gives you three things that work together:
 > (dummy mode + a scriptable mock for tests), and the first drivers — the R&S
 > **`FSV3007` and `FPL1003` spectrum analyzers** (with the Spectrum measurement
 > functions — channel power, ACLR, OBW, SEM, harmonics, TOI, AM depth — and the
-> **Noise Figure** application), the R&S **`ZNLE18` 18 GHz vector network
+> **Noise Figure** application), the Siglent **`SHA851A` and `SHA852A` handheld
+> spectrum analyzers** (with a robust single-sweep CW reading and channel power),
+> the R&S **`ZNLE18` 18 GHz vector network
 > analyzer**, the R&S **`RTO64` oscilloscope** (4 channels, 600 MHz – 6 GHz by
 > option, with waveform transfer, automatic measurements and FFT), the Aim-TTi
 > **`TGR6000` 6 GHz RF signal generator**, and the

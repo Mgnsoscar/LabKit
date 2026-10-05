@@ -56,8 +56,9 @@ leave hardware safe — e.g. RF output off), then the VISA session is closed. Se
 The spectrum-analyzer drivers are the Rohde & Schwarz
 [`FSV3007`][labkit.instruments.drivers.rohde_schwarz.fsv3007.FSV3007] (7.5 GHz)
 and [`FPL1003`][labkit.instruments.drivers.rohde_schwarz.fpl1003.FPL1003]
-(3 GHz). Both expose the instrument through **menus** — grouped commands you
-reach as attributes:
+(3 GHz), and the Siglent SHA851A and SHA852A ([below](#siglent-sha850a)). All
+expose the instrument through **menus** — grouped commands you reach as
+attributes:
 
 ```python
 from labkit.units import quantity
@@ -148,6 +149,93 @@ sa.noise_figure.set_input_loss(quantity(0.8, "dB"))
 sa.noise_figure.set_loss_table("OUTPUT", freqs, losses, name="CableB")
 sa.noise_figure.set_loss_from_path("OUTPUT", output_path, measurement_freqs)
 ```
+
+### Siglent SHA850A
+
+The Siglent handheld analyzers are the
+[`SHA851A`][labkit.instruments.drivers.siglent.sha851a.SHA851A] (3.6 GHz) and
+[`SHA852A`][labkit.instruments.drivers.siglent.sha852a.SHA852A] (7.5 GHz), built
+the same way as the R&S ones: a shared
+[`SHA850A`][labkit.instruments.drivers.siglent._spectrum_analyzer.SHA850A] base
+composed from menus, with the two models on top. Give the analyzer's IP address
+and the driver connects to its raw SCPI socket (`TCPIP::<ip>::5025::SOCKET`); a
+full VISA resource string (VXI-11, USB) is used as given.
+
+```python
+from labkit.units import quantity
+from labkit.instruments import SHA852A
+
+sa = ...  # an SHA852A from your TestEnvironment, e.g. SHA852A(self, "SA", "192.168.0.20")
+
+sa.system.require_firmware()                 # >= 1.8R4: older firmware freezes on *OPC?
+sa.reference.set_source("EXTernal")          # the 10 MHz input; read back with get_source()
+sa.amplitude.set_attenuation(quantity(20, "dB"))   # even values 0-50 dB only
+sa.amplitude.set_preamp(False)
+sa.amplitude.set_ref_level(quantity(0, "dBm"))
+sa.trace.set_detector("AVERage")
+sa.trace.set_average_type("POWer")           # RMS averaging
+
+level = sa.measure_cw(quantity(1575.42, "MHz"))    # span 5 kHz, RBW = VBW = 1 kHz -> dBm
+level = sa.measure_cw(quantity(1227.6, "MHz"))     # only the center frequency is re-sent
+
+power, density = sa.measurement.channel_power(quantity(1575.42, "MHz"), quantity(2.046, "MHz"))
+
+freqs, levels = sa.trace.get_data()          # ASCII, sized from the returned points
+```
+
+Menus: `frequency`, `bandwidth`, `sweep`, `amplitude`, `trace` (type, detector,
+averaging, data), `measurement` (mode and measurement selection, channel power
+with the SHA850-AMK option), `reference` (10 MHz input) and `system` (identity,
+firmware, alignment, preset) — plus `marker(n)`. Setters are quantity-checked and
+range-checked against what the manual *and* the datasheet allow. The failsafe
+`_shutdown_procedure` returns the analyzer to continuous sweep.
+
+The measurement sequences are built for an unattended calibration run:
+
+- **`single_sweep()`** sends `:INIT:CONT OFF`, restarts the averages the driver
+  set up and `:INIT:IMM`, then waits with one `*OPC?` whose timeout is the sweep
+  time × the number of averaged sweeps plus a margin. If `*OPC?` does not answer
+  `1` (firmware before 1.8R4 froze on it; the sister SSA3015X Plus stalls) it
+  sleeps the expected sweep time instead.
+- **`measure_cw(f, span, rbw, vbw, averages)`** configures the analyzer for a CW
+  tone, single-sweeps, puts marker 1 on the peak and returns its level in dBm.
+  It remembers what it set and sends only what changed; any other command sent
+  through the driver makes the next call send everything again.
+- **`measurement.channel_power(center, bandwidth, span, averages)`** selects
+  channel power, measures, and always goes back to the swept spectrum. It reads
+  the SHA form `:CHPower:MEASure:CHPower?` and falls back to the SSA form
+  `:MEASure:CHPower?`. The density comes back as a linear mW/Hz quantity
+  (LabKit quantities cannot carry dBm/Hz);
+  [`dbm_per_hz`][labkit.instruments.drivers.siglent.band.dbm_per_hz] converts it.
+- **[`integrate_band`][labkit.instruments.drivers.siglent.band.integrate_band]**
+  computes a band's power from a trace for an analyzer without the channel-power
+  option; pass `GAUSSIAN_NOISE_BW_FACTOR` (≈ 1.06) to correct the RBW to its
+  noise bandwidth.
+
+!!! warning "SHA850A remote-command caveats"
+    The SHA850A manual (EN01D) reuses text from the SSA3000X Plus / SVA1000X
+    family and has copy errors. Where it is silent or inconsistent the driver is
+    defensive, and each case is noted in the menu's docstring:
+
+    - **Error queue.** `:SYSTem:ERRor?` is not in the SHA's command list.
+      `check_errors()` asks it on a short timeout and does not raise when it gets
+      no reply, an empty one or "undefined header". Overload is shown on the
+      screen only.
+    - **Limits.** The manual and the datasheet disagree on the RBW (10 MHz vs
+      3 MHz) and the reference level (−170 … +23 dBm vs −200 … +30 dBm); the
+      driver accepts only what both allow.
+    - **Sweep mode.** `[:SENSe]:SWEep:MODE` is listed without its syntax;
+      `sweep.set_mode` follows the SSA guide and is unverified. In FFT mode
+      (RBW ≤ 10 kHz) the sweep time cannot be set and the analyzer may return
+      fewer trace points than set.
+    - **Channel power.** Two read forms, a channel-power span command printed
+      with a typo (`CHPower:REQuency:SPAN`), and no documented average count.
+    - **Trace data** is read as ASCII: binary blocks over a raw socket with
+      line-feed termination are fragile, and their byte order is undocumented.
+    - **Alignment** (`system.align_now()`, `:CALibration`) refuses to run while a
+      trace is in VIEW, which gave large errors on old firmware.
+
+    Verify each of these on the instrument in its first session.
 
 ## Signal generators
 
@@ -443,7 +531,9 @@ freqs, levels = sa.trace.get_data()       # parses the scripted response
     All command strings are taken from the manufacturers' remote-control manuals:
     the R&S analyzers from the R&S FSVA3000/FSV3000 User Manual (1178.8520.02,
     issue 16) and the FSV3-K30 Noise Figure User Manual (1178.9432.02, issue 13);
-    the Aim-TTi TGR6000 from its Instruction Manual (Iss 9); the R&S ZNLE18
+    the Siglent SHA851A/SHA852A from the SHA850A User Manual (EN01D),
+    cross-checked against the SSA3000X Plus / SVA1000X Programming Guide
+    (PG0703P_E02B); the Aim-TTi TGR6000 from its Instruction Manual (Iss 9); the R&S ZNLE18
     from the R&S ZNL/ZNLE User Manual (1178.5966.02, issue 23); the R&S RTO64
     from the R&S RTO6 User Manual (1801.6687.02), chapter 24; and the
     Keysight/Agilent N5183A from the MXG Signal Generators SCPI Command
@@ -467,6 +557,30 @@ freqs, levels = sa.trace.get_data()       # parses the scripted response
 ::: labkit.instruments.drivers.rohde_schwarz.measurement
 
 ::: labkit.instruments.drivers.rohde_schwarz.noise_figure
+
+::: labkit.instruments.drivers.siglent._spectrum_analyzer
+
+::: labkit.instruments.drivers.siglent.sha851a
+
+::: labkit.instruments.drivers.siglent.sha852a
+
+::: labkit.instruments.drivers.siglent.frequency
+
+::: labkit.instruments.drivers.siglent.bandwidth
+
+::: labkit.instruments.drivers.siglent.sweep
+
+::: labkit.instruments.drivers.siglent.amplitude
+
+::: labkit.instruments.drivers.siglent.trace
+
+::: labkit.instruments.drivers.siglent.marker
+
+::: labkit.instruments.drivers.siglent.measurement
+
+::: labkit.instruments.drivers.siglent.system
+
+::: labkit.instruments.drivers.siglent.band
 
 ::: labkit.instruments.drivers.aim_tti._signal_generator
 
