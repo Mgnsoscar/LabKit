@@ -28,14 +28,32 @@ _VBW_RANGE_HZ = (1.0, 10e6)
 class Bandwidth(Menu):
     """Resolution bandwidth (RBW) and video bandwidth (VBW)."""
 
+    @staticmethod
+    def check_rbw(bandwidth: Quantity) -> float:
+        """`bandwidth` in Hz when it is a valid RBW (1 Hz … 3 MHz), else :class:`ValueError`.
+
+        Sends nothing: :meth:`set_rbw` checks with it, and so does
+        :meth:`~labkit.instruments.drivers.siglent._spectrum_analyzer.SHA850A.measure_cw`
+        before its first write.
+        """
+        value = float(ensure_frequency(bandwidth).to("Hz").magnitude)
+        c.check_range(value, *_RBW_RANGE_HZ, "RBW", "Hz")
+        return value
+
+    @staticmethod
+    def check_vbw(bandwidth: Quantity) -> float:
+        """`bandwidth` in Hz when it is a valid VBW (1 Hz … 10 MHz), else :class:`ValueError`."""
+        value = float(ensure_frequency(bandwidth).to("Hz").magnitude)
+        c.check_range(value, *_VBW_RANGE_HZ, "VBW", "Hz")
+        return value
+
     def set_rbw(self, bandwidth: Quantity) -> None:
         """Set the resolution bandwidth (``:BWID``), 1 Hz … 3 MHz.
 
         The analyzer rounds up to the next value of its 1-3-10 sequence (§3.2.1).
         An RBW of 10 kHz or less puts it into FFT mode.
         """
-        value = ensure_frequency(bandwidth).to("Hz").magnitude
-        c.check_range(value, *_RBW_RANGE_HZ, "RBW", "Hz")
+        self.check_rbw(bandwidth)
         self.write(f":BWID {c.hz(bandwidth)}")
 
     def get_rbw(self) -> Quantity:
@@ -50,8 +68,7 @@ class Bandwidth(Menu):
 
     def set_vbw(self, bandwidth: Quantity) -> None:
         """Set the video bandwidth (``:BWID:VID``), 1 Hz … 10 MHz."""
-        value = ensure_frequency(bandwidth).to("Hz").magnitude
-        c.check_range(value, *_VBW_RANGE_HZ, "VBW", "Hz")
+        self.check_vbw(bandwidth)
         self.write(f":BWID:VID {c.hz(bandwidth)}")
 
     def get_vbw(self) -> Quantity:

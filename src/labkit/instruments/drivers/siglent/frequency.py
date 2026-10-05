@@ -43,9 +43,25 @@ class Frequency(Menu):
         c.check_range(value, 0.0, top, label, "Hz")
         return float(value)
 
+    def check_center(self, frequency: Quantity) -> float:
+        """`frequency` in Hz when it is a valid center frequency for the model, else :class:`ValueError`.
+
+        Sends nothing: :meth:`set_center` checks with it, and so does
+        :meth:`~labkit.instruments.drivers.siglent._spectrum_analyzer.SHA850A.measure_cw`
+        before its first write.
+        """
+        return self._check(frequency, "Center frequency")
+
+    def check_span(self, span: Quantity) -> float:
+        """`span` in Hz when it is a valid span (0 Hz, or 100 Hz up to the model's range), else :class:`ValueError`."""
+        value = self._check(span, "Span")
+        if 0.0 < value < _MIN_SPAN_HZ:
+            raise ValueError(f"Span {span} is below the {_MIN_SPAN_HZ:g} Hz minimum (0 Hz = zero span).")
+        return value
+
     def set_center(self, frequency: Quantity) -> None:
         """Set the center frequency (``:FREQ:CENT``)."""
-        self._check(frequency, "Center frequency")
+        self.check_center(frequency)
         self.write(f":FREQ:CENT {c.hz(frequency)}")
 
     def get_center(self) -> Quantity:
@@ -58,9 +74,7 @@ class Frequency(Menu):
         measurement the analyzer uses its own span setting instead (see
         :meth:`~labkit.instruments.drivers.siglent.measurement.Measurement.channel_power`).
         """
-        value = self._check(span, "Span")
-        if 0.0 < value < _MIN_SPAN_HZ:
-            raise ValueError(f"Span {span} is below the {_MIN_SPAN_HZ:g} Hz minimum (0 Hz = zero span).")
+        self.check_span(span)
         self.write(f":FREQ:SPAN {c.hz(span)}")
 
     def get_span(self) -> Quantity:

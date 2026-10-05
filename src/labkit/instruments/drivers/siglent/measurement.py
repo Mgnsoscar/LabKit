@@ -14,7 +14,10 @@ The manual is not consistent about channel power, so the driver is defensive:
   both values (power, density) or just the power; the density is then the
   power normalised to 1 Hz over the integration bandwidth, which is what the
   analyzer reports as its density ("Power (in dBm/Hz) normalized to 1Hz within
-  the integration bandwidth", §3.11.2).
+  the integration bandwidth", §3.11.2). A form the analyzer does not know gets
+  no reply and leaves a ``-113`` in its error queue, which
+  :meth:`~labkit.instruments.drivers.siglent._spectrum_analyzer.SHA850A.check_errors`
+  then expects.
 - **Span.** The SHA's note on ``[:SENSe]:FREQuency:SPAN`` says channel power has
   its own span command, printed ``[:SENSe]:CHPower:REQuency:SPAN`` — taken as a
   typo for ``FREQuency``. ``[:SENSe]:CHPower:FREQuency:SPAN:POWer`` ("span
@@ -149,10 +152,11 @@ class Measurement(Menu):
             try:
                 response = self.query(command)
             except Exception:
-                # An unknown query gets no reply on the raw socket; a slow one
-                # may still answer after the timeout — never let that answer
-                # become the reply to the next query.
-                self._analyzer._drain_input()
+                # An unknown query gets no reply on the raw socket (the next
+                # query resynchronises the session, in case a slow one answers
+                # after all) and leaves a -113 in the error queue that
+                # check_errors expects.
+                self._analyzer._note_probe(command)
                 continue
             try:
                 values = c.parse_float_list(response)

@@ -181,6 +181,7 @@ level = sa.measure_cw(quantity(1227.6, "MHz"))     # only the center frequency i
 power, density = sa.measurement.channel_power(quantity(1575.42, "MHz"), quantity(2.046, "MHz"))
 
 freqs, levels = sa.trace.get_data()          # ASCII, sized from the returned points
+freqs = sa.trace.get_x(1)                    # trace 1's axis (reads the trace to size it)
 ```
 
 Menus: `frequency`, `bandwidth`, `sweep`, `amplitude`, `trace` (type, detector,
@@ -192,15 +193,31 @@ range-checked against what the manual *and* the datasheet allow. The failsafe
 
 The measurement sequences are built for an unattended calibration run:
 
+- **Staying in step.** On the raw socket a reply that comes after its query
+  timed out would be read as the answer to the *next* query, and every reply
+  after it would be one behind. So a query that raises marks the session out of
+  step, and the next query first resynchronises it: it sends `*IDN?` and reads
+  until the identity comes back, discarding the late reply (or a late `*OPC?`
+  `1`) in front of it. If even that gets no answer the driver raises
+  `TimeoutError` — it never reads a marker out of step.
 - **`single_sweep()`** sends `:INIT:CONT OFF`, restarts the averages the driver
-  set up and `:INIT:IMM`, then waits with one `*OPC?` whose timeout is the sweep
-  time × the number of averaged sweeps plus a margin. If `*OPC?` does not answer
-  `1` (firmware before 1.8R4 froze on it; the sister SSA3015X Plus stalls) it
-  sleeps the expected sweep time instead.
+  set up and `:INIT:IMM`, then waits with one `*OPC?` whose timeout is the number
+  of averaged sweeps × (the sweep time × 1.25 + 0.2 s) plus a margin —
+  `:SWE:TIME?` reports the sampling time only, not the scheduling time (§3.3.3).
+  It accepts only an exact `1`; a late one is read by the resynchronisation.
+  When the `1` never comes but the analyzer answers again (firmware before 1.8R4
+  froze on `*OPC?`; the sister SSA3015X Plus stalls) it sleeps the expected
+  sweep time instead.
 - **`measure_cw(f, span, rbw, vbw, averages)`** configures the analyzer for a CW
   tone, single-sweeps, puts marker 1 on the peak and returns its level in dBm.
-  It remembers what it set and sends only what changed; any other command sent
-  through the driver makes the next call send everything again.
+  It checks every setting before the first write, remembers what it set and
+  sends only what changed; any other command sent through the driver, or a call
+  that failed part-way, makes the next call send everything again. Its one-time
+  setup selects the Swept SA measurement (`ensure_swept_sa()`: a measurement
+  left active at the front panel keeps its own span and RBW) and switches off
+  the front-panel settings that shift or move a marker reading: the reference
+  level offset (keeping the displayed reference level), the peak threshold and
+  excursion criteria, and the eight amplitude-correction sets.
 - **`measurement.channel_power(center, bandwidth, span, averages)`** selects
   channel power, measures, and always goes back to the swept spectrum. It reads
   the SHA form `:CHPower:MEASure:CHPower?` and falls back to the SSA form
@@ -219,8 +236,10 @@ The measurement sequences are built for an unattended calibration run:
 
     - **Error queue.** `:SYSTem:ERRor?` is not in the SHA's command list.
       `check_errors()` asks it on a short timeout and does not raise when it gets
-      no reply, an empty one or "undefined header". Overload is shown on the
-      screen only.
+      no reply. When it does answer, the whole queue is read and every error
+      raised — "undefined header" (`-113`) too, which names an earlier command
+      the analyzer did not know — except the one the driver's own channel-power
+      read probe leaves. Overload is shown on the screen only.
     - **Limits.** The manual and the datasheet disagree on the RBW (10 MHz vs
       3 MHz) and the reference level (−170 … +23 dBm vs −200 … +30 dBm); the
       driver accepts only what both allow.
@@ -233,7 +252,11 @@ The measurement sequences are built for an unattended calibration run:
     - **Trace data** is read as ASCII: binary blocks over a raw socket with
       line-feed termination are fragile, and their byte order is undocumented.
     - **Alignment** (`system.align_now()`, `:CALibration`) refuses to run while a
-      trace is in VIEW, which gave large errors on old firmware.
+      trace is in VIEW, which gave large errors on old firmware (a trace whose
+      state cannot be read is skipped).
+    - **Firmware names.** `system.firmware_version()` reads `1.8R4`, `V1.8R10`,
+      the old `V1.1.2.1.6R5` and the first release `V1.1.2.1.2` (no `R`, read as
+      1.2R0), so `require_firmware()` refuses all of the old ones.
 
     Verify each of these on the instrument in its first session.
 

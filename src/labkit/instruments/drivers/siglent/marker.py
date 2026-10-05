@@ -1,8 +1,8 @@
 """Markers (``:CALCulate:MARKer`` subsystem).
 
 Verified against the *SHA850A User Manual* (EN01D) §3.9.1–§3.9.12: marker state,
-mode, trace, X/Y read-out, marker functions and the peak searches. The SHA850A
-has eight markers.
+mode, trace, X/Y read-out, marker functions, the peak searches and their
+criteria. The SHA850A has eight markers.
 """
 
 from __future__ import annotations
@@ -72,8 +72,28 @@ class Marker(Menu):
         return c.as_power(self.query(f":CALC:MARK{self.number}:Y?"))
 
     def peak_search(self) -> None:
-        """Move the marker to the trace maximum (``:CALC:MARK<n>:MAX``)."""
+        """Move the marker to the trace maximum (``:CALC:MARK<n>:MAX``).
+
+        The search honours the peak criteria (:meth:`set_peak_threshold_enabled`,
+        :meth:`set_peak_excursion_enabled`): a peak that fails them is not found
+        and the marker stays where it was (§3.9.12).
+        """
         self.write(f":CALC:MARK{self.number}:MAX")
+
+    def set_peak_threshold_enabled(self, enabled: bool) -> None:
+        """Switch the peak-search threshold criterion on/off (``:CALC:MARK:PEAK:THR:STAT``).
+
+        The criterion is shared by every marker's peak search (§3.9.12.2); off,
+        the threshold is the analyzer's minimum (−200 dBm).
+        """
+        self.write(f":CALC:MARK:PEAK:THR:STAT {c.onoff(enabled)}")
+
+    def set_peak_excursion_enabled(self, enabled: bool) -> None:
+        """Switch the peak-search excursion criterion on/off (``:CALC:MARK:PEAK:EXC:STAT``).
+
+        Shared by every marker's peak search (§3.9.12.2); off, any excursion counts.
+        """
+        self.write(f":CALC:MARK:PEAK:EXC:STAT {c.onoff(enabled)}")
 
     def next_peak(self) -> None:
         """Move the marker to the next peak (``:CALC:MARK<n>:MAX:NEXT``)."""

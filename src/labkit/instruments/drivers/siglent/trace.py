@@ -27,7 +27,7 @@ Settings made at the front panel are not seen; pass ``sweeps=`` to
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Optional
 
 import numpy as np
 
@@ -162,12 +162,21 @@ class Trace(Menu):
             raise RuntimeError(f"Trace {n} returned no data.")
         return quantity(np.array(values), "dBm")
 
-    def get_x(self, points: int) -> Quantity:
-        """The frequency axis for `points` trace values, from start/stop.
+    def get_x(self, trace: int = 1, *, points: Optional[int] = None) -> Quantity:
+        """The frequency axis of a trace, from start/stop.
 
-        Use the number of values the analyzer *returned* (FFT mode may return
-        fewer than the sweep-point setting).
+        The same call as the Rohde & Schwarz analyzers' ``get_x(trace)``. The
+        number of points is the number of values the trace *returns*: FFT mode
+        may return fewer than the sweep-point setting, so without `points` the
+        trace is read (``:TRAC<n>:DATA?``) to size the axis. Pass `points` (a
+        keyword) when the trace values are already in hand — :meth:`get_data`
+        does — to skip that read.
         """
+        n = self._check(trace)
+        if points is None:
+            points = len(self.get_y(n).magnitude)
+        if int(points) < 1:
+            raise ValueError(f"Points must be at least 1, got {points}.")
         start = c.parse_float(self.query(":FREQ:STAR?"))
         stop = c.parse_float(self.query(":FREQ:STOP?"))
         return quantity(np.linspace(start, stop, int(points)), "Hz")
@@ -175,4 +184,4 @@ class Trace(Menu):
     def get_data(self, trace: int = 1) -> tuple[Quantity, Quantity]:
         """Return ``(frequencies, levels)`` for a trace as quantity arrays (ASCII transfer)."""
         levels = self.get_y(trace)
-        return self.get_x(len(levels.magnitude)), levels
+        return self.get_x(trace, points=len(levels.magnitude)), levels

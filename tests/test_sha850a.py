@@ -24,12 +24,14 @@ from labkit.instruments.mock import MockBackend, MockEnvironment
 from labkit.units import DimensionalityError, quantity as Q
 
 _IDN = "Siglent Technologies,SHA852A,SHA85XCX123456,1.8R10"
+#: What a clean analyzer answers to the one-time setup's checks of measure_cw.
+_SWEPT_SA = {":INST?": "SA", ":INST:MEAS?": "SA", ":DISP:WIND:TRAC:Y:SCAL:RLEV:OFFS?": "0"}
 
 
 def _sa(
     responses: Optional[dict[str, str]] = None, cls: type[SHA850A] = SHA852A, **kwargs: Any
 ) -> tuple[SHA850A, MockBackend]:
-    table = {"*IDN?": _IDN, "*OPC?": "1", ":SWE:TIME?": "0.02"}
+    table = {"*IDN?": _IDN, "*OPC?": "1", ":SWE:TIME?": "0.02", **_SWEPT_SA}
     table.update(responses or {})
     sa, be = mock_instrument(cls, responses=table, **kwargs)
     return sa, be
@@ -310,6 +312,27 @@ def test_empty_trace_data_raises() -> None:
         sa.trace.get_data(1)
 
 
+def test_get_x_takes_a_trace_like_the_rs_analyzers() -> None:
+    # get_x(1) is "the axis of trace 1" (the R&S signature), never a one-point axis.
+    sa, be = _sa(
+        {
+            ":TRAC1:DATA?": "-80.5,-60.25,-20.0,-61.0,-79.75",
+            ":FREQ:STAR?": "1575418000",
+            ":FREQ:STOP?": "1575422000",
+        }
+    )
+    freqs = sa.trace.get_x(1)
+    assert len(freqs.magnitude) == 5
+    assert be.queries == [":TRAC1:DATA?", ":FREQ:STAR?", ":FREQ:STOP?"]
+    be.queries.clear()
+    assert len(sa.trace.get_x(points=3).magnitude) == 3  # sized by the caller: no trace read
+    assert be.queries == [":FREQ:STAR?", ":FREQ:STOP?"]
+    with pytest.raises(TypeError):
+        sa.trace.get_x(1, 5)  # type: ignore[call-arg]  # points is keyword-only
+    with pytest.raises(ValueError):
+        sa.trace.get_x(7, points=5)
+
+
 # -- marker -------------------------------------------------------------------------
 
 def test_marker_commands_and_reads() -> None:
@@ -395,6 +418,9 @@ def test_auto_alignment_takes_0_or_1() -> None:
         ("1.8.4", (1, 8, 4)),
         ("V1.8.4", (1, 8, 4)),
         ("V1.1.2.1.6R5", (1, 6, 5)),
+        ("V1.1.2.1.5R0", (1, 5, 0)),
+        ("V1.1.2.1.2", (1, 2, 0)),  # the first release: no "R" (revision history)
+        ("Software Version V1.1.2.1.2, FPGA 2.0", (1, 2, 0)),
         ("Software Version: 1.8R10, FPGA: 2.0.1", (1, 8, 10)),
         ("100.01.01.06.01", None),
         ("", None),
@@ -430,6 +456,12 @@ def test_require_firmware_passes_returns_and_refuses() -> None:
         old.system.require_firmware((1, 8, 4))
 
 
+def test_require_firmware_refuses_the_first_release() -> None:
+    sa, _ = _sa({"*IDN?": "Siglent,SHA852A,SN1,V1.1.2.1.2"})
+    with pytest.raises(RuntimeError, match="1.2R0"):
+        sa.system.require_firmware()
+
+
 def test_require_firmware_warns_when_the_version_cannot_be_read() -> None:
     sa, _ = _sa({"*IDN?": "Siglent,SHA852A,SN1,100.01.01.06.01"})
     with pytest.warns(UserWarning, match="firmware"):
@@ -438,10 +470,83 @@ def test_require_firmware_warns_when_the_version_cannot_be_read() -> None:
 
 # -- error queue -----------------------------------------------------------------------
 
-@pytest.mark.parametrize("reply", ["", "0", '0,"No error"', '+0,"No error"', '-113,"Undefined header"', "Undefined header"])
+@pytest.mark.parametrize("reply", ["", "0", '0,"No error"', '+0,"No error"'])
 def test_check_errors_tolerates_no_queue(reply: str) -> None:
-    sa, _ = _sa({":SYST:ERR?": reply})
+    sa, be = _sa({":SYST:ERR?": reply})
     sa.check_errors("after setup")
+    assert be.queries == [":SYST:ERR?"]
+
+
+def _error_queue(*entries: str) -> Callable[[str], str]:
+    """A responder whose :SYST:ERR? pops `entries` like a real queue, then answers "0"."""
+    queue = list(entries)
+
+    def responder(command: str) -> str:
+        if command == ":SYST:ERR?":
+            return queue.pop(0) if queue else '0,"No error"'
+        return {"*OPC?": "1", ":SWE:TIME?": "0.02", "*IDN?": _IDN, **_SWEPT_SA}.get(command, "")
+
+    return responder
+
+
+@pytest.mark.parametrize(
+    "entry",
+    ['-113,"Undefined header;:CHP:FREQ:SPAN 3069000.0"', '-113,"Undefined header"', "Undefined header"],
+)
+def test_check_errors_reports_an_undefined_header(entry: str) -> None:
+    # A -113 names an earlier command the analyzer did not know (it cannot be
+    # about :SYST:ERR? itself: an unknown query gets no reply at all).
+    sa, _ = mock_instrument(SHA852A, responses=_error_queue(entry))
+    with pytest.raises(RuntimeError, match="-113|Undefined header"):
+        sa.check_errors("after channel power")
+
+
+def test_check_errors_reads_the_whole_queue() -> None:
+    sa, be = mock_instrument(
+        SHA852A,
+        responses=_error_queue('-113,"Undefined header;:CHP:FREQ:SPAN 3069000.0"', '-222,"Data out of range"'),
+    )
+    with pytest.raises(RuntimeError) as raised:
+        sa.check_errors("after channel power")
+    assert "CHP:FREQ:SPAN" in str(raised.value) and "-222" in str(raised.value)
+    assert be.queries == [":SYST:ERR?"] * 3  # two entries, then "0"
+    sa.check_errors("again")  # the queue is empty now
+
+
+def test_check_errors_skips_the_drivers_own_probe() -> None:
+    # channel_power tries the SHA read form first; an analyzer that only knows
+    # the SSA form leaves a -113 for it, which is expected.
+    queue: list[str] = []
+
+    def responder(command: str) -> str:
+        if command == ":CHP:MEAS:CHP?":
+            queue.append('-113,"Undefined header;:CHP:MEAS:CHP?"')
+            raise TimeoutError("VI_ERROR_TMO")
+        if command == ":SYST:ERR?":
+            return queue.pop(0) if queue else "0"
+        return {"*OPC?": "1", ":SWE:TIME?": "0.1", ":MEAS:CHP?": "-29.0,-92.0"}.get(command, "")
+
+    sa, _ = mock_instrument(SHA852A, responses=responder)
+    sa.measurement.channel_power(Q(1575.42, "MHz"), Q(2.046, "MHz"))
+    sa.check_errors("after channel power")
+    # Only once: the same -113 again, with no probe to explain it, is reported.
+    queue.append('-113,"Undefined header;:CHP:MEAS:CHP?"')
+    with pytest.raises(RuntimeError, match="-113"):
+        sa.check_errors("later")
+
+
+def test_a_bare_undefined_header_is_skipped_only_while_a_probe_explains_it() -> None:
+    sa, _ = mock_instrument(SHA852A, responses=_error_queue('-113,"Undefined header"'))
+    sa._note_probe(":CHP:MEAS:CHP?")
+    sa.check_errors("after channel power")  # the probe explains it
+    bare, _ = mock_instrument(SHA852A, responses=_error_queue('-113,"Undefined header"'))
+    with pytest.raises(RuntimeError, match="-113"):
+        bare.check_errors("no probe")  # nothing explains it
+    cleared, _ = mock_instrument(SHA852A, responses=_error_queue('-113,"Undefined header"'))
+    cleared._note_probe(":CHP:MEAS:CHP?")
+    cleared.system.clear_status()  # *CLS empties the queue, and the probe with it
+    with pytest.raises(RuntimeError, match="-113"):
+        cleared.check_errors("a later error")
 
 
 def test_check_errors_tolerates_no_reply_at_all() -> None:
@@ -477,7 +582,7 @@ def test_single_sweep_sleeps_when_opc_returns_nothing() -> None:
     sa, be = _sa({"*OPC?": "", ":SWE:TIME?": "0.4"}, sleep=sleeps)
     sa.single_sweep()
     assert be.writes == [":INIT:CONT OFF", ":INIT:IMM"]
-    assert sleeps.calls == [pytest.approx(0.4 * 1.25 + 0.5)]
+    assert sleeps.calls == [pytest.approx((0.4 * 1.25 + 0.2) + 0.5)]
 
 
 def test_single_sweep_sleeps_when_opc_raises() -> None:
@@ -490,7 +595,7 @@ def test_single_sweep_sleeps_when_opc_raises() -> None:
 
     sa, _ = mock_instrument(SHA852A, responses=responder, sleep=sleeps)
     sa.single_sweep()
-    assert sleeps.calls == [pytest.approx(0.2 * 1.25 + 0.5)]
+    assert sleeps.calls == [pytest.approx((0.2 * 1.25 + 0.2) + 0.5)]
 
 
 def test_single_sweep_restarts_and_waits_for_every_average() -> None:
@@ -501,7 +606,7 @@ def test_single_sweep_restarts_and_waits_for_every_average() -> None:
     be.writes.clear()
     sa.single_sweep()
     assert be.writes == [":INIT:CONT OFF", ":AVER:TRAC1:CLE", ":INIT:IMM"]
-    assert sleeps.calls == [pytest.approx(0.1 * 8 * 1.25 + 0.5)]
+    assert sleeps.calls == [pytest.approx(8 * (0.1 * 1.25 + 0.2) + 0.5)]
 
 
 class _TimedBackend:
@@ -518,7 +623,7 @@ class _TimedBackend:
     def query(self, command: str) -> str:
         self.queries.append((command, self.timeout))
         reply = self.replies.get(command, "")
-        if isinstance(reply, Exception):
+        if isinstance(reply, BaseException):
             raise reply
         return str(reply)
 
@@ -546,7 +651,8 @@ def test_opc_timeout_covers_the_sweeps_and_is_restored() -> None:
     sa = _timed(backend)
     sa.single_sweep(sweeps=4)
     opc = [t for q, t in backend.queries if q == "*OPC?"]
-    assert opc == [pytest.approx((2.0 * 4 * 1.25 + 3.0) * 1000)]
+    # Each sweep: :SWE:TIME? (the sampling time only, §3.3.3) x 1.25 + 0.2 s of overhead.
+    assert opc == [pytest.approx((4 * (2.0 * 1.25 + 0.2) + 3.0) * 1000)]
     assert backend.timeout == pytest.approx(10000.0)
 
 
@@ -566,14 +672,54 @@ def test_explicit_single_sweep_timeout_is_used() -> None:
     assert [t for q, t in backend.queries if q == "*OPC?"] == [pytest.approx(90000.0)]
 
 
-def test_a_late_opc_reply_is_drained_before_falling_back() -> None:
+def test_a_timed_out_opc_is_resynchronised_not_slept_over() -> None:
+    # The late "1" and then the identity come back: the sweep is over, no sleep.
     sleeps = _Sleeps()
-    backend = _TimedBackend({":SWE:TIME?": "0.2", "*OPC?": TimeoutError("VI_ERROR_TMO")}, stale=["1"])
+    backend = _TimedBackend({":SWE:TIME?": "0.2", "*OPC?": TimeoutError("VI_ERROR_TMO")}, stale=["1", _IDN])
     sa = _timed(backend, sleep=sleeps)
     sa.single_sweep()
-    assert backend.reads == 2  # the late "1", then nothing more
-    assert sleeps.calls == [pytest.approx(0.2 * 1.25 + 0.5)]
+    assert backend.writes[-1] == "*IDN?"
+    assert backend.reads == 2
+    assert sleeps.calls == []
     assert backend.timeout == pytest.approx(10000.0)
+
+
+def test_an_opc_that_never_answers_sleeps_once_the_session_is_in_step() -> None:
+    # The SSA3015X Plus quirk: no "1" at all, but the analyzer answers the
+    # identity — in step, so the expected sweep time is slept instead.
+    sleeps = _Sleeps()
+    backend = _TimedBackend({":SWE:TIME?": "0.2", "*OPC?": TimeoutError("VI_ERROR_TMO")}, stale=[_IDN])
+    sa = _timed(backend, sleep=sleeps)
+    sa.single_sweep()
+    assert sleeps.calls == [pytest.approx((0.2 * 1.25 + 0.2) + 0.5)]
+
+
+def test_a_session_that_cannot_be_resynchronised_raises() -> None:
+    sleeps = _Sleeps()
+    backend = _TimedBackend({":SWE:TIME?": "0.2", "*OPC?": TimeoutError("VI_ERROR_TMO")})
+    sa = _timed(backend, sleep=sleeps)
+    with pytest.raises(TimeoutError, match="resynchronise"):
+        sa.single_sweep()
+    assert sleeps.calls == []  # never fall through to reading a marker
+    assert backend.writes.count("*IDN?") == 1
+    with pytest.raises(TimeoutError):
+        sa.query(":CALC:MARK1:Y?")  # still out of step: no query goes out
+    assert backend.writes.count("*IDN?") == 1  # the owed identity is waited for, not asked again
+    assert [q for q, _ in backend.queries].count(":CALC:MARK1:Y?") == 0
+    backend.stale = ["1", _IDN]  # it finally arrives
+    backend.replies[":CALC:MARK1:Y?"] = "-30.5"
+    assert sa.query(":CALC:MARK1:Y?") == "-30.5"
+
+
+def test_an_interrupted_query_marks_the_session_out_of_step() -> None:
+    # Its reply may still come; the next query resynchronises before it asks.
+    backend = _TimedBackend({":SWE:TIME?": KeyboardInterrupt()}, stale=[_IDN])
+    sa = _timed(backend)
+    with pytest.raises(KeyboardInterrupt):
+        sa.sweep_seconds()
+    backend.replies[":SWE:TIME?"] = "0.5"
+    assert sa.sweep_seconds() == 0.5
+    assert backend.writes == ["*IDN?"] and backend.reads == 1
 
 
 def test_wait_for_instrument_is_one_opc_query() -> None:
@@ -587,6 +733,9 @@ def test_wait_for_instrument_is_one_opc_query() -> None:
 
 _CW_SETUP = [
     ":UNIT:POW DBM",
+    ":CALC:MARK:PEAK:THR:STAT OFF",
+    ":CALC:MARK:PEAK:EXC:STAT OFF",
+    *[f":CORR:CSET{n} 0" for n in range(1, 9)],
     ":BWID:AUTO OFF",
     ":BWID:VID:AUTO OFF",
     ":TRAC1:DISP ACTIve",
@@ -596,6 +745,8 @@ _CW_SETUP = [
     ":CALC:MARK1:FUNC OFF",
 ]
 _SWEEP = [":INIT:CONT OFF", ":INIT:IMM", ":CALC:MARK1:MAX"]
+#: The one-time setup's checks: the active measurement, then the reference level offset.
+_CW_SETUP_QUERIES = [":INST?", ":INST:MEAS?", ":DISP:WIND:TRAC:Y:SCAL:RLEV:OFFS?"]
 
 
 def test_measure_cw_first_call_sends_everything() -> None:
@@ -609,7 +760,7 @@ def test_measure_cw_first_call_sends_everything() -> None:
         ":BWID:VID 1000.0",
         ":TRAC1:TYPE WRITe",
     ] + _SWEEP
-    assert be.queries == [":SWE:TIME?", "*OPC?", ":CALC:MARK1:Y?"]
+    assert be.queries == _CW_SETUP_QUERIES + [":SWE:TIME?", "*OPC?", ":CALC:MARK1:Y?"]
 
 
 def test_measure_cw_sends_only_what_changed() -> None:

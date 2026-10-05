@@ -145,6 +145,11 @@ def as_ratio(response: str) -> Quantity:
 # takes its last two numbers: "1.6R5" orders before every 1.7/1.8 release, which
 # is all a minimum-version check needs.
 _R_VERSION = re.compile(r"(\d+)\.(\d+)\s*R\s*(\d+)", re.IGNORECASE)
+# The old scheme without its "R<revision>": the first SHA850A release is
+# "V1.1.2.1.2" (firmware revision history). Read as (1, <last number>, 0), the
+# same ordering the R form above gives the old names. Searched with digit/dot
+# boundaries, so a longer dotted number does not match inside it.
+_OLD_VERSION = re.compile(r"(?<![\d.])V?1\.1\.2\.1\.(\d+)(?![\d.])", re.IGNORECASE)
 # A plain dotted triple, but only as the whole field ("1.8.4", "V1.8.4"), so a
 # longer dotted string such as the "100.01.01.06.01" of the manual's *IDN?
 # example is not misread as version 100.1.1.
@@ -154,16 +159,22 @@ _DOTTED_VERSION = re.compile(r"^V?(\d+)\.(\d+)\.(\d+)$", re.IGNORECASE)
 def parse_firmware(text: str) -> Optional[tuple[int, int, int]]:
     """Parse a Siglent firmware version into ``(major, minor, revision)``.
 
-    Accepts ``"1.8R4"``, ``"V1.8R10"``, ``"1.8.4"`` and the old
-    ``"V1.1.2.1.6R5"`` naming (read as ``(1, 6, 5)``); returns ``None`` for
-    anything else. The ``R`` form is searched anywhere in `text`, so a longer
-    string (a system-information line) may be passed; the dotted form must be
-    the whole of `text`.
+    Accepts ``"1.8R4"``, ``"V1.8R10"``, ``"1.8.4"`` and the old names:
+    ``"V1.1.2.1.6R5"`` is read as ``(1, 6, 5)`` and the first release,
+    ``"V1.1.2.1.2"`` (no ``R``), as ``(1, 2, 0)``. Returns ``None`` for
+    anything else. The ``R`` form and the old names are searched anywhere in
+    `text`, so a longer string (a system-information line) may be passed; the
+    dotted triple must be the whole of `text`.
     """
     text = text.strip()
     match = _R_VERSION.search(text)
-    if match is None:
-        match = _DOTTED_VERSION.match(text)
+    if match is not None:
+        major, minor, revision = (int(group) for group in match.groups())
+        return major, minor, revision
+    old = _OLD_VERSION.search(text)
+    if old is not None:
+        return 1, int(old.group(1)), 0
+    match = _DOTTED_VERSION.match(text)
     if match is None:
         return None
     major, minor, revision = (int(group) for group in match.groups())

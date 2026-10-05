@@ -1,8 +1,15 @@
 """Amplitude and RF input path (``:DISPlay``, ``[:SENSe]:POWer``, ``:UNIT``).
 
-Verified against the *SHA850A User Manual* (EN01D) §3.4.1–§3.4.5. Any change of
-reference level, attenuation, preamplifier or reference offset restarts the
-sweep (§3.4).
+Verified against the *SHA850A User Manual* (EN01D) §3.4.1–§3.4.5 and §3.5
+(amplitude corrections). Any change of reference level, attenuation,
+preamplifier or reference offset restarts the sweep (§3.4).
+
+The reference level offset "changes both the reference level readout and the
+amplitude readout of the marker; but does not impact the position of traces"
+(§3.4.4), and an enabled correction set shifts every level read (§3.5): both are
+front-panel settings that persist, which
+:meth:`~labkit.instruments.drivers.siglent._spectrum_analyzer.SHA850A.measure_cw`
+switches off before it reads.
 
 Limits
 ------
@@ -22,7 +29,7 @@ from ....units import DimensionalityError, Quantity, ensure_power, is_dimensionl
 from ...base import Menu
 from . import _common as c
 
-__all__ = ["Amplitude", "PowerUnit", "ScaleType"]
+__all__ = ["Amplitude", "PowerUnit", "ScaleType", "CORRECTION_SETS"]
 
 #: Amplitude (y-axis) units (§3.4.5.3).
 PowerUnit = Literal["DBM", "DBMV", "DBUV", "DBUA", "V", "W"]
@@ -31,6 +38,8 @@ ScaleType = Literal["LINear", "LOGarithmic"]
 
 _REF_LEVEL_RANGE_DBM = (-170.0, 23.0)
 _ATTENUATION_MAX_DB = 50
+#: The amplitude-correction sets (``:CORR:CSET1`` … ``CSET8``, §3.5).
+CORRECTION_SETS = range(1, 9)
 
 
 def _even_attenuation(attenuation: Quantity) -> int:
@@ -48,25 +57,41 @@ def _even_attenuation(attenuation: Quantity) -> int:
     return int(nearest)
 
 
+def _correction_set(number: int) -> int:
+    if int(number) not in CORRECTION_SETS:
+        raise ValueError(f"Correction set must be 1–8, got {number}.")
+    return int(number)
+
+
 class Amplitude(Menu):
-    """Reference level, attenuation, preamplifier, y-axis scale and unit."""
+    """Reference level and its offset, attenuation, preamplifier, y-axis scale and unit, corrections."""
 
     # -- reference level ---------------------------------------------------
+    @staticmethod
+    def check_ref_level(level: Quantity) -> float:
+        """`level` in dBm when it is a valid reference level (−170 … +23 dBm), else :class:`ValueError`."""
+        value = float(ensure_power(level).to("dBm").magnitude)
+        c.check_range(value, *_REF_LEVEL_RANGE_DBM, "Reference level", "dBm")
+        return value
+
     def set_ref_level(self, level: Quantity) -> None:
         """Set the reference level (``:DISP:WIND:TRAC:Y:RLEV``), −170 … +23 dBm.
 
         Sent with an explicit ``DBM`` suffix (the manual's own example), so the
         value means dBm whatever y-axis unit is selected.
         """
-        value = ensure_power(level).to("dBm").magnitude
-        c.check_range(value, *_REF_LEVEL_RANGE_DBM, "Reference level", "dBm")
+        self.check_ref_level(level)
         self.write(f":DISP:WIND:TRAC:Y:RLEV {c.dbm(level)} DBM")
 
     def get_ref_level(self) -> Quantity:
         return c.as_power(self.query(":DISP:WIND:TRAC:Y:RLEV?"))
 
     def set_ref_level_offset(self, offset: Quantity) -> None:
-        """Offset the reference level and marker readouts (``:DISP:WIND:TRAC:Y:SCAL:RLEV:OFFS``), dB."""
+        """Offset the reference level and marker readouts (``:DISP:WIND:TRAC:Y:SCAL:RLEV:OFFS``), dB.
+
+        The traces do not move (§3.4.4): the displayed reference level changes
+        by the offset while the analyzer's own stays put.
+        """
         self.write(f":DISP:WIND:TRAC:Y:SCAL:RLEV:OFFS {c.db(offset)}")
 
     def get_ref_level_offset(self) -> Quantity:
@@ -111,3 +136,16 @@ class Amplitude(Menu):
 
     def get_preamp(self) -> bool:
         return c.parse_bool(self.query(":POW:GAIN?"))
+
+    # -- amplitude corrections ---------------------------------------------
+    def set_correction(self, number: int, enabled: bool) -> None:
+        """Switch amplitude correction set `number` (1-8) on/off (``:CORR:CSET<n>``, takes 0|1).
+
+        "There are eight corrections, which enter into force at the same time"
+        (§3.5): an enabled set shifts every level read, markers included.
+        """
+        self.write(f":CORR:CSET{_correction_set(number)} {int(bool(enabled))}")
+
+    def get_correction(self, number: int) -> bool:
+        """``True`` while amplitude correction set `number` (1-8) is on (``:CORR:CSET<n>?``)."""
+        return c.parse_bool(self.query(f":CORR:CSET{_correction_set(number)}?"))

@@ -13,7 +13,8 @@ checks it. The version is read from field 4 of ``*IDN?`` ("software number",
 §10.5) and, failing that, from the system-information string. The manual's
 ``*IDN?`` example ("Siglent,SVA1015,1234567890,100.01.01.06.01") is copied from
 another product, so the exact form on the SHA850A is unverified; the parser takes
-``1.8R4``, ``V1.8R10`` and ``1.8.4``.
+``1.8R4``, ``V1.8R10``, ``1.8.4`` and the old names (``V1.1.2.1.6R5``, and the
+first release ``V1.1.2.1.2`` with no ``R``).
 
 Error queue
 -----------
@@ -162,7 +163,12 @@ class System(Menu):
         analyzer is waited for with one ``*OPC?`` of up to `timeout`.
         """
         for trace in range(1, 7):
-            state = self.query(f":TRAC{trace}:DISP?").strip().upper()
+            try:
+                state = self.query(f":TRAC{trace}:DISP?").strip().upper()
+            except Exception:
+                # Unreadable: skip this trace (the next query resynchronises
+                # the session, in case the reply comes late).
+                continue
             if state.startswith("VIEW"):
                 raise RuntimeError(
                     f"Trace {trace} is in VIEW; set it active (or blank) before aligning."
@@ -186,6 +192,7 @@ class System(Menu):
     def clear_status(self) -> None:
         """Clear the status registers and the error queue (``*CLS``)."""
         self.write("*CLS")
+        self._analyzer._probed_headers.clear()
 
     def get_event_status(self) -> int:
         """Read and clear the standard event status register (``*ESR?``).
