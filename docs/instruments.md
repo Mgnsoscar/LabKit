@@ -149,6 +149,19 @@ sa.noise_figure.set_loss_table("OUTPUT", freqs, losses, name="CableB")
 sa.noise_figure.set_loss_from_path("OUTPUT", output_path, measurement_freqs)
 ```
 
+How much each noise-figure point scatters is set by four settings, all of
+which the second-stage calibration depends on, so set them before calibrating:
+
+```python
+sa.noise_figure.set_rbw(quantity(1, "MHz"))         # wider is quieter; keep it inside the DUT's band
+sa.noise_figure.set_sweep_time(quantity(100, "ms")) # per point, noise source on and off together
+sa.noise_figure.set_average_count(10)               # measurements averaged at every frequency
+sa.noise_figure.set_preamp(True)                    # lower analyzer noise figure (option required)
+```
+
+These four were checked against the R&S FSW-K30 manual, whose command set the
+FSV3-K30 shares; verify them on the instrument.
+
 ## Signal generators
 
 The RF signal-generator driver is the Aim-TTi

@@ -179,6 +179,22 @@ def test_noise_figure_frequency_config() -> None:
     ]
 
 
+def test_noise_figure_bandwidth_time_averaging_and_preamp() -> None:
+    sa, be = _sa()
+    sa.noise_figure.set_rbw(Q(1, "MHz"))
+    sa.noise_figure.set_sweep_time(Q(100, "ms"))
+    sa.noise_figure.set_average_count(10)
+    sa.noise_figure.set_preamp(True)
+    assert be.writes == [
+        "BAND:AUTO OFF", "BAND 1000000.0",
+        "SWE:TIME:AUTO OFF", "SWE:TIME 0.1",
+        "SWE:COUN 10",
+        "INP:GAIN:STAT ON",
+    ]
+    with pytest.raises(ValueError):
+        sa.noise_figure.set_average_count(40000)
+
+
 def test_noise_figure_calibration_and_results() -> None:
     sa, be = _sa()
     sa.noise_figure.set_second_stage_correction(True)

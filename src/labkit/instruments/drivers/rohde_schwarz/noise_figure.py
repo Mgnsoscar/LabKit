@@ -125,6 +125,42 @@ class NoiseFigure(Menu):
         """Measure at a single frequency (``CONF:FREQ:CONT`` / ``CONF:FREQ:SING``)."""
         self.write("CONF:FREQ:CONT" if continuous else "CONF:FREQ:SING")
 
+    # -- what sets the result's jitter -------------------------------------
+    # Each noise-figure point is two noise-power readings (noise source on and off); their
+    # scatter falls with the bandwidth times the time spent on them, and with averaging.
+    # Checked against the R&S FSW-K30 manual (1173.9270.02, version 26), chapter 7: the
+    # FSV3-K30 uses the same commands; verify them on the instrument before relying on them.
+
+    def set_rbw(self, bandwidth: Quantity) -> None:
+        """Use a constant resolution bandwidth for every point (``BAND:AUTO OFF``, ``BAND``).
+
+        Wider is quieter, but keep it well inside the DUT's band: the RBW integrates
+        everything within it, so at a band edge it also takes in the filter's skirt.
+        """
+        ensure_frequency(bandwidth)
+        self.write("BAND:AUTO OFF")
+        self.write(f"BAND {c.hz(bandwidth)}")
+
+    def set_sweep_time(self, time: Quantity) -> None:
+        """Time spent at each measurement point, noise source on and off together (``SWE:TIME:AUTO OFF``, ``SWE:TIME``)."""
+        self.write("SWE:TIME:AUTO OFF")
+        self.write(f"SWE:TIME {c.seconds(time)}")
+
+    def set_average_count(self, count: int) -> None:
+        """Average this many measurements at every frequency before the result is shown (``SWE:COUN``, 0 or 1 = none)."""
+        if not 0 <= int(count) <= 32767:
+            raise ValueError(f"The average count must be 0 to 32767, got {count}.")
+        self.write(f"SWE:COUN {int(count)}")
+
+    def set_preamp(self, enabled: bool) -> None:
+        """The analyzer's internal preamplifier (``INP:GAIN:STAT``; needs the option).
+
+        It lowers the analyzer's own noise figure, which matters whenever the DUT's
+        gain is not much larger than it: the second-stage correction then removes
+        less, and the result scatters less. Calibrate after changing it.
+        """
+        self.write(f"INP:GAIN:STAT {c.onoff(enabled)}")
+
     # -- calibration (second-stage correction) ----------------------------
     def set_second_stage_correction(self, enabled: bool) -> None:
         """Enable/disable second-stage (calibration) correction (``CORR``)."""
